@@ -2,56 +2,86 @@ package controllers
 
 import (
 	"net/http"
-	"sci-stock-api/config"
-	"sci-stock-api/models"
+	"path/filepath"
 
 	"github.com/gin-gonic/gin"
+	"sci-stock-api/config"
+	"sci-stock-api/models"
 )
 
-func GetProducts(c *gin.Context) {
-    var products []models.Product
-    if err := config.DB.Find(&products).Error; err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch products"})
-        return
-    }
-    c.JSON(http.StatusOK, products)
+// map category => table model
+var productTables = map[string]interface{}{
+	"dried_food":  &[]models.DriedFood{},
+	"fresh_food":  &[]models.FreshFood{},
+	"snack":       &[]models.Snack{},
+	"soft_drink":  &[]models.SoftDrink{},
+	"stationery":  &[]models.Stationery{},
 }
 
-func CreateProduct(c *gin.Context) {
-	var product models.Product
-	if err := c.ShouldBindJSON(&product); err != nil {
+func GetProductsByCategory(c *gin.Context) {
+	category := c.Param("category")
+	products, exists := productTables[category]
+	if !exists {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid category"})
+		return
+	}
+
+	if err := config.DB.Find(products).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot fetch products"})
+		return
+	}
+
+	c.JSON(http.StatusOK, products)
+}
+
+func CreateProductByCategory(c *gin.Context) {
+	category := c.Param("category")
+	_, exists := productTables[category]
+	if !exists {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid category"})
+		return
+	}
+
+	// Dynamic struct per table
+	var input struct {
+		ProductName   string  `form:"product_name" binding:"required"`
+		Barcode       string  `form:"barcode" binding:"required"`
+		Price         float64 `form:"price" binding:"required"`
+		Cost          float64 `form:"cost" binding:"required"`
+		Stock         int     `form:"stock"`
+		ReorderLevel  int     `form:"reorder_level"`
+	}
+
+	if err := c.ShouldBind(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	config.DB.Create(&product)
-	c.JSON(http.StatusCreated, product)
-}
-
-func UpdateProduct(c *gin.Context) {
-	id := c.Param("id")
-	var product models.Product
-
-	if err := config.DB.First(&product, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
-		return
+	// Handle image upload
+	file, err := c.FormFile("image")
+	var imageURL string
+	if err == nil {
+		path := "uploads/" + filepath.Base(file.Filename)
+		if err := c.SaveUploadedFile(file, path); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "upload failed"})
+			return
+		}
+		imageURL = path
 	}
 
-	if err := c.ShouldBindJSON(&product); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+	// Insert based on category
+	switch category {
+	case "dried_food":
+		config.DB.Create(&models.DriedFood{ProductName: input.ProductName, Barcode: input.Barcode, Price: input.Price, Cost: input.Cost, Stock: input.Stock, ReorderLevel: input.ReorderLevel, ImageURL: imageURL})
+	case "fresh_food":
+		config.DB.Create(&models.FreshFood{ProductName: input.ProductName, Barcode: input.Barcode, Price: input.Price, Cost: input.Cost, Stock: input.Stock, ReorderLevel: input.ReorderLevel, ImageURL: imageURL})
+	case "snack":
+		config.DB.Create(&models.Snack{ProductName: input.ProductName, Barcode: input.Barcode, Price: input.Price, Cost: input.Cost, Stock: input.Stock, ReorderLevel: input.ReorderLevel, ImageURL: imageURL})
+	case "soft_drink":
+		config.DB.Create(&models.SoftDrink{ProductName: input.ProductName, Barcode: input.Barcode, Price: input.Price, Cost: input.Cost, Stock: input.Stock, ReorderLevel: input.ReorderLevel, ImageURL: imageURL})
+	case "stationery":
+		config.DB.Create(&models.Stationery{ProductName: input.ProductName, Barcode: input.Barcode, Price: input.Price, Cost: input.Cost, Stock: input.Stock, ReorderLevel: input.ReorderLevel, ImageURL: imageURL})
 	}
 
-	config.DB.Save(&product)
-	c.JSON(http.StatusOK, product)
-}
-
-func DeleteProduct(c *gin.Context) {
-	id := c.Param("id")
-	if err := config.DB.Delete(&models.Product{}, id).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Delete failed"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "Deleted successfully"})
+	c.JSON(http.StatusCreated, gin.H{"message": "product created"})
 }

@@ -9,7 +9,7 @@ type User struct {
 	FirstName    string    `gorm:"size:100" json:"first_name"`
 	LastName     string    `gorm:"size:100" json:"last_name"`
 	RoleID       uint      `json:"role_id"`
-	ProfileImage []byte    `json:"-"`
+	ProfileImage []byte    `gorm:"type:longblob"`
 	CreatedAt    time.Time `gorm:"autoCreateTime" json:"created_at"`
 	Role         Role      `gorm:"foreignKey:RoleID" json:"role"`
 }

@@ -10,7 +10,7 @@ func main() {
 	config.Connect()
 
 	router := gin.Default()
-	routes.RegisterRoutes(router)
+	routes.SetupRoutes(router)
 
 	router.Run(":8080")
 }
