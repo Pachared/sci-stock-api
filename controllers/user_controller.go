@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -21,76 +22,149 @@ func GetUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"users": users})
 }
 
-func CreateUser(c *gin.Context) {
-	// รับค่าแบบ multipart
-	if err := c.Request.ParseMultipartForm(10 << 20); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot parse form"})
-		return
-	}
+func CreateUserRequestByAdmin(c *gin.Context) {
+    if err := c.Request.ParseMultipartForm(10 << 20); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "ไม่สามารถอ่านข้อมูลได้"})
+        return
+    }
 
-	// ดึงค่าจาก JWT middleware
-	userID, exists := c.Get("userID")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
+    // ดึงสิทธิ์จาก JWT (middleware เก็บ userID ไว้)
+    currentID, exists := c.Get("userID")
+    if !exists {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+        return
+    }
 
-	var currentUser models.User
-	if err := config.DB.First(&currentUser, userID).Error; err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
-		return
-	}
+    var creator models.User
+    if err := config.DB.First(&creator, currentID).Error; err != nil {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "ไม่พบผู้ใช้"})
+        return
+    }
 
-	// รับค่าจาก form
-	gmail := c.PostForm("gmail")
-	password := c.PostForm("password")
-	firstName := c.PostForm("first_name")
-	lastName := c.PostForm("last_name")
-	roleIDStr := c.PostForm("role_id")
+    gmail := c.PostForm("gmail")
+    password := c.PostForm("password")
+    firstName := c.PostForm("first_name")
+    lastName := c.PostForm("last_name")
+    roleStr := c.PostForm("role_id")
 
-	roleID, err := strconv.ParseUint(roleIDStr, 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid role ID"})
-		return
-	}
+    roleID, err := strconv.Atoi(roleStr)
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "role_id ไม่ถูกต้อง"})
+        return
+    }
 
-	// ตรวจสิทธิ์
-	if currentUser.RoleID == 2 && roleID <= 2 {
-		c.JSON(http.StatusForbidden, gin.H{"error": "admin cannot create admin or superadmin"})
-		return
-	}
+    if creator.RoleID == 2 && roleID <= 2 {
+        c.JSON(http.StatusForbidden, gin.H{"error": "admin ไม่สามารถสร้าง admin หรือ superadmin ได้"})
+        return
+    }
 
-	// อ่านรูป
-	file, _, err := c.Request.FormFile("profile_image")
-	var imageData []byte
-	if err == nil {
-		defer file.Close()
-		imageData, _ = io.ReadAll(file)
-	}
+    // ตรวจอีเมลซ้ำ
+    var count int64
+    config.DB.Model(&models.User{}).Where("gmail = ?", gmail).Count(&count)
+    if count > 0 {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "อีเมลนี้ถูกใช้งานแล้ว"})
+        return
+    }
 
-	// Hash password
-	hashedPass, err := services.HashPassword(password)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot hash password"})
-		return
-	}
+    config.DB.Table("user_verifications").Where("gmail = ?", gmail).Count(&count)
+    if count > 0 {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "อีเมลนี้กำลังรอยืนยัน OTP อยู่"})
+        return
+    }
 
-	newUser := models.User{
-		Gmail:        gmail,
-		Password:     hashedPass,
-		FirstName:    firstName,
-		LastName:     lastName,
-		RoleID:       uint(roleID),
-		ProfileImage: imageData,
-	}
+    file, _, _ := c.Request.FormFile("profile_image")
+    var imageData []byte
+    if file != nil {
+        defer file.Close()
+        imageData, _ = io.ReadAll(file)
+    }
 
-	if err := config.DB.Create(&newUser).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "email already exists"})
-		return
-	}
+    hashedPass, _ := services.HashPassword(password)
+    otp := services.GenerateOTP(6)
+    now := time.Now().In(time.FixedZone("Asia/Bangkok", 7*3600))
+    expire := now.Add(10 * time.Minute)
 
-	c.JSON(http.StatusCreated, gin.H{"message": "user created"})
+    // บันทึกชั่วคราว
+    err = config.DB.Exec(`
+        INSERT INTO user_verifications (gmail, password, first_name, last_name, role_id, profile_image, otp, otp_expires_at, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, gmail, hashedPass, firstName, lastName, roleID, imageData, otp, expire, now).Error
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกได้"})
+        return
+    }
+
+    html, plain := services.GenerateEmailBodyForRegisterOTP(otp)
+    if err := services.SendEmail(gmail, "ยืนยัน OTP สำหรับการสร้างบัญชี", html, plain); err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "ส่งอีเมล OTP ไม่สำเร็จ"})
+        return
+    }
+
+    c.JSON(http.StatusOK, gin.H{"message": "ส่ง OTP สำเร็จ กรุณายืนยันอีเมล"})
 }
+
+func VerifyAndActivateUser(c *gin.Context) {
+    var input struct {
+        Gmail string `json:"gmail" binding:"required,email"`
+        OTP   string `json:"otp" binding:"required"`
+    }
+
+    if err := c.ShouldBindJSON(&input); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+        return
+    }
+
+    var verif struct {
+        Gmail        string
+        Password     string
+        FirstName    string
+        LastName     string
+        RoleID       int
+        Image        []byte `gorm:"column:profile_image"`
+        OTP          string
+        OtpExpiresAt time.Time
+    }
+
+    err := config.DB.Raw(`
+        SELECT gmail, password, first_name, last_name, role_id, profile_image, otp, otp_expires_at
+        FROM user_verifications
+        WHERE gmail = ? ORDER BY id DESC LIMIT 1
+    `, input.Gmail).Scan(&verif).Error
+
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถตรวจสอบ OTP ได้"})
+        return
+    }
+
+    if verif.OTP != input.OTP {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "รหัส OTP ไม่ถูกต้อง"})
+        return
+    }
+
+    if time.Now().After(verif.OtpExpiresAt) {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "รหัส OTP หมดอายุแล้ว"})
+        return
+    }
+
+    // สร้างบัญชีจริง
+    user := models.User{
+        Gmail:        verif.Gmail,
+        Password:     verif.Password,
+        FirstName:    verif.FirstName,
+        LastName:     verif.LastName,
+        RoleID:       uint(verif.RoleID),
+        ProfileImage: verif.Image,
+    }
+
+    if err := config.DB.Create(&user).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "สร้างบัญชีไม่สำเร็จ"})
+        return
+    }
+
+    config.DB.Exec("DELETE FROM user_verifications WHERE gmail = ?", input.Gmail)
+    c.JSON(http.StatusOK, gin.H{"message": "ยืนยันสำเร็จ บัญชีถูกสร้างแล้ว"})
+}
+
 
 func UpdateUser(c *gin.Context) {
 	id := c.Param("id")

@@ -69,7 +69,6 @@ func CreateProductByCategory(c *gin.Context) {
 		imageURL = path
 	}
 
-	// Insert based on category
 	switch category {
 	case "dried_food":
 		config.DB.Create(&models.DriedFood{ProductName: input.ProductName, Barcode: input.Barcode, Price: input.Price, Cost: input.Cost, Stock: input.Stock, ReorderLevel: input.ReorderLevel, ImageURL: imageURL})

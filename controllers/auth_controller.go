@@ -1,76 +1,213 @@
 package controllers
 
 import (
+	"encoding/base64"
 	"io"
 	"net/http"
 	"sci-stock-api/config"
 	"sci-stock-api/models"
 	"sci-stock-api/services"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pquerna/otp/totp"
 )
 
-// Login รับ email กับ password แล้วตรวจสอบ จากนั้นส่ง JWT token กลับ
 func Login(c *gin.Context) {
 	var input struct {
-		Gmail    string `json:"gmail" binding:"required,email"`
-		Password string `json:"password" binding:"required"`
+		Gmail     string `json:"gmail" binding:"required,email"`
+		Password  string `json:"password" binding:"required"`
+		TwoFACode string `json:"two_fa_code"`
 	}
+
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลที่ส่งมาไม่ถูกต้อง: " + err.Error()})
 		return
 	}
 
 	var user models.User
 	if err := config.DB.Where("gmail = ?", input.Gmail).First(&user).Error; err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "อีเมลหรือรหัสผ่านไม่ถูกต้อง"})
 		return
 	}
 
 	if !services.CheckPasswordHash(input.Password, user.Password) {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "อีเมลหรือรหัสผ่านไม่ถูกต้อง"})
 		return
+	}
+
+	// ตรวจสอบ 2FA ถ้าเปิดใช้งาน
+	if user.TwoFASecret != "" {
+		if input.TwoFACode == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "กรุณากรอกโค้ด 2FA"})
+			return
+		}
+		if !services.ValidateTOTP(input.TwoFACode, user.TwoFASecret) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "โค้ด 2FA ไม่ถูกต้อง"})
+			return
+		}
 	}
 
 	token, err := services.GenerateJWT(user.ID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not generate token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถสร้างโทเค็นได้ โปรดลองใหม่ภายหลัง"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"token": token})
 }
 
-// Profile ดึงข้อมูล user ตาม userID ที่อยู่ใน JWT
+func ValidateTOTP(code string, secret string) bool {
+	return totp.Validate(code, secret)
+}
+
+func EnableTwoFA(c *gin.Context) {
+	userID := c.MustGet("userID").(uint)
+
+	var user models.User
+	if err := config.DB.First(&user, userID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบผู้ใช้"})
+		return
+	}
+
+	if user.TwoFAEnabled {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "คุณเปิดใช้งาน 2FA อยู่แล้ว"})
+		return
+	}
+
+	secret, qrURL, err := services.GenerateTwoFA(user.Gmail)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถสร้างรหัส 2FA ได้"})
+		return
+	}
+
+	// บันทึก secret ลง DB ชั่วคราวก่อนผู้ใช้จะยืนยัน
+	user.TwoFASecret = secret
+	if err := config.DB.Save(&user).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกข้อมูล 2FA ได้"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"qr_url": qrURL,
+		"message": "กรุณาสแกน QR ด้วยแอป Authenticator แล้วใส่รหัส 6 หลักเพื่อยืนยัน",
+	})
+}
+
+func ConfirmEnableTwoFA(c *gin.Context) {
+	userID := c.MustGet("userID").(uint)
+	var input struct {
+		Code string `json:"code" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณากรอกรหัส 2FA"})
+		return
+	}
+
+	var user models.User
+	if err := config.DB.First(&user, userID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบผู้ใช้"})
+		return
+	}
+
+	if !services.ValidateTOTP(user.TwoFASecret, input.Code) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "รหัส 2FA ไม่ถูกต้อง"})
+		return
+	}
+
+	user.TwoFAEnabled = true
+	if err := config.DB.Save(&user).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถเปิดใช้งาน 2FA ได้"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "เปิดใช้งาน 2FA สำเร็จ"})
+}
+
 func Profile(c *gin.Context) {
 	userID := c.MustGet("userID").(uint)
 
 	var user models.User
 	if err := config.DB.First(&user, userID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบข้อมูลผู้ใช้"})
 		return
 	}
 
-	c.JSON(http.StatusOK, user)
+	var profileImage string
+	if len(user.ProfileImage) > 0 {
+		profileImage = base64.StdEncoding.EncodeToString(user.ProfileImage)
+	} else {
+		profileImage = ""
+	}
+
+	resp := models.UserProfileResponse{
+		Gmail:        user.Gmail,
+		FirstName:    user.FirstName,
+		LastName:     user.LastName,
+		RoleID:       user.RoleID,
+		ProfileImage: profileImage,
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
 
-// RefreshToken สร้าง JWT token ใหม่
 func RefreshToken(c *gin.Context) {
-	userID := c.MustGet("userID").(uint)
-
-	newToken, err := services.GenerateJWT(userID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+	authHeader := c.GetHeader("Authorization")
+	if authHeader == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ไม่พบข้อมูล Authorization header"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"token": newToken})
+	parts := strings.SplitN(authHeader, " ", 2)
+	if len(parts) != 2 || parts[0] != "Bearer" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "รูปแบบ Authorization header ไม่ถูกต้อง"})
+		return
+	}
+	refreshToken := parts[1]
+
+	claims, err := services.ParseRefreshToken(refreshToken)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token ไม่ถูกต้องหรือหมดอายุ"})
+		return
+	}
+
+	userID := claims.UserID
+
+	var tokenRecord models.RefreshToken
+	err = config.DB.Where("user_id = ? AND token = ?", userID, refreshToken).First(&tokenRecord).Error
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token นี้ไม่ถูกจดจำในระบบ"})
+		return
+	}
+
+	if tokenRecord.ExpiresAt.Before(time.Now()) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token หมดอายุ"})
+		return
+	}
+
+	newAccessToken, err := services.GenerateJWT(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถสร้าง Access token ใหม่ได้"})
+		return
+	}
+
+	newRefreshToken, err := services.GenerateRefreshToken(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถสร้าง Refresh token ใหม่ได้"})
+		return
+	}
+
+	// อัปเดต Refresh token ใหม่ในฐานข้อมูล
+	config.DB.Model(&tokenRecord).Update("token", newRefreshToken)
+
+	c.JSON(http.StatusOK, gin.H{
+		"access_token":  newAccessToken,
+		"refresh_token": newRefreshToken,
+	})
 }
 
-// Register รับสมัครและส่ง OTP ยืนยันอีเมล
 func Register(c *gin.Context) {
-
 	if err := c.Request.ParseMultipartForm(10 << 20); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ไม่สามารถอ่านข้อมูลที่ส่งมาได้"})
 		return
@@ -94,7 +231,7 @@ func Register(c *gin.Context) {
 	}
 	config.DB.Table("user_verifications").Where("gmail = ?", gmail).Count(&count)
 	if count > 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "อีเมลนี้กำลังรอยืนยัน OTP"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "อีเมลนี้กำลังรอยืนยัน OTP อยู่"})
 		return
 	}
 
@@ -107,7 +244,7 @@ func Register(c *gin.Context) {
 
 	hashedPass, err := services.HashPassword(password)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "เข้ารหัสรหัสผ่านไม่สำเร็จ"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในการเข้ารหัสรหัสผ่าน"})
 		return
 	}
 
@@ -134,14 +271,13 @@ func Register(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "ส่ง OTP ไปยังอีเมลแล้ว กรุณายืนยันเพื่อสมัครสมาชิก"})
 }
 
-// VerifyUser ตรวจสอบ OTP และยืนยันการสมัคร
 func VerifyUser(c *gin.Context) {
 	var input struct {
 		Gmail string `json:"gmail" binding:"required,email"`
 		OTP   string `json:"otp" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง: " + err.Error()})
 		return
 	}
 
@@ -169,12 +305,12 @@ func VerifyUser(c *gin.Context) {
 	}
 
 	if userVerif.OTP != input.OTP {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "OTP ไม่ถูกต้อง"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "รหัส OTP ไม่ถูกต้อง"})
 		return
 	}
 
 	if time.Now().In(loc).After(userVerif.OtpExpiresAt) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "OTP หมดอายุแล้ว"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "รหัส OTP หมดอายุแล้ว"})
 		return
 	}
 
@@ -195,74 +331,4 @@ func VerifyUser(c *gin.Context) {
 	config.DB.Exec("DELETE FROM user_verifications WHERE gmail = ?", input.Gmail)
 
 	c.JSON(http.StatusOK, gin.H{"message": "สมัครสมาชิกและยืนยันสำเร็จ"})
-}
-
-func ForgotPassword(c *gin.Context) {
-	var input struct {
-		Gmail string `json:"gmail" binding:"required,email"`
-	}
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	otp := services.GenerateOTP(6)
-	loc, _ := time.LoadLocation("Asia/Bangkok")
-	expire := time.Now().In(loc).Add(10 * time.Minute)
-
-	err := config.DB.Exec(`
-		INSERT INTO password_resets (gmail, otp, expires_at, created_at)
-		VALUES (?, ?, ?, ?)
-	`, input.Gmail, otp, expire, time.Now().In(loc)).Error
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึก OTP ได้"})
-		return
-	}
-
-	html, plain := services.GenerateEmailBodyForOTP(otp)
-	if err := services.SendEmail(input.Gmail, "Reset Password OTP", html, plain); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "ส่งอีเมลไม่สำเร็จ"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "ส่งรหัส OTP ไปยังอีเมลแล้ว"})
-}
-
-func ResetPassword(c *gin.Context) {
-	var input struct {
-		Gmail       string `json:"gmail" binding:"required,email"`
-		OTP         string `json:"otp" binding:"required"`
-		NewPassword string `json:"new_password" binding:"required,min=6"`
-	}
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	loc, _ := time.LoadLocation("Asia/Bangkok")
-	var otpEntry struct {
-		OTP       string
-		ExpiresAt time.Time
-	}
-
-	err := config.DB.Raw(`
-		SELECT otp, expires_at
-		FROM password_resets
-		WHERE gmail = ? ORDER BY created_at DESC LIMIT 1
-	`, input.Gmail).Scan(&otpEntry).Error
-
-	if err != nil || otpEntry.OTP != input.OTP {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "OTP ไม่ถูกต้อง"})
-		return
-	}
-
-	if time.Now().In(loc).After(otpEntry.ExpiresAt) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "OTP หมดอายุแล้ว"})
-		return
-	}
-
-	hashed, _ := services.HashPassword(input.NewPassword)
-	config.DB.Model(&models.User{}).Where("gmail = ?", input.Gmail).Update("password", hashed)
-
-	c.JSON(http.StatusOK, gin.H{"message": "เปลี่ยนรหัสผ่านเรียบร้อยแล้ว"})
 }
