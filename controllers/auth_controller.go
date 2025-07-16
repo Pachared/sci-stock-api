@@ -52,13 +52,20 @@ func Login(c *gin.Context) {
 
 	token, err := services.GenerateJWT(user.ID, user.Role.Name)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถสร้างโทเค็นได้ โปรดลองใหม่ภายหลัง"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถสร้าง access token ได้"})
+		return
+	}
+
+	refreshToken, err := services.GenerateRefreshToken(user.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถสร้าง refresh token ได้"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"token": token,
-		"role":  user.Role.Name,
+		"token":         token,
+		"refresh_token": refreshToken,
+		"role":          user.Role.Name,
 	})
 }
 
@@ -151,6 +158,7 @@ func Profile(c *gin.Context) {
 		FirstName:    user.FirstName,
 		LastName:     user.LastName,
 		RoleID:       user.RoleID,
+		RoleName:     user.Role.Name,
 		ProfileImage: profileImage,
 	}
 
