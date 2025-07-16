@@ -28,6 +28,7 @@ func init() {
 // Struct สำหรับ Access Token claims
 type JWTClaims struct {
 	UserID uint `json:"user_id"`
+	Role   string `json:"role"`
 	jwt.RegisteredClaims
 }
 
@@ -38,11 +39,12 @@ type RefreshClaims struct {
 }
 
 // สร้าง Access Token
-func GenerateJWT(userID uint) (string, error) {
+func GenerateJWT(userID uint, role string) (string, error) {
 	expirationTime := time.Now().UTC().Add(15 * time.Minute)
 
 	claims := &JWTClaims{
 		UserID: userID,
+		Role:   role, // <-- ใส่ role ลงไป
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -61,7 +63,7 @@ func GenerateJWT(userID uint) (string, error) {
 
 // สร้าง Refresh Token
 func GenerateRefreshToken(userID uint) (string, error) {
-	expirationTime := time.Now().Add(7 * 24 * time.Hour) // 7 วัน
+	expirationTime := time.Now().Add(7 * 24 * time.Hour)
 
 	claims := &RefreshClaims{
 		UserID: userID,

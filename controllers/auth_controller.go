@@ -9,6 +9,7 @@ import (
 	"sci-stock-api/services"
 	"strings"
 	"time"
+	"log"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pquerna/otp/totp"
@@ -27,17 +28,17 @@ func Login(c *gin.Context) {
 	}
 
 	var user models.User
-	if err := config.DB.Where("gmail = ?", input.Gmail).First(&user).Error; err != nil {
+	if err := config.DB.Preload("Role").Where("gmail = ?", input.Gmail).First(&user).Error; err != nil {
+		log.Printf("Failed login attempt for gmail: %s from IP: %s", input.Gmail, c.ClientIP())
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "อีเมลหรือรหัสผ่านไม่ถูกต้อง"})
 		return
-	}
+	}	
 
 	if !services.CheckPasswordHash(input.Password, user.Password) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "อีเมลหรือรหัสผ่านไม่ถูกต้อง"})
 		return
 	}
 
-	// ตรวจสอบ 2FA ถ้าเปิดใช้งาน
 	if user.TwoFASecret != "" {
 		if input.TwoFACode == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "กรุณากรอกโค้ด 2FA"})
@@ -49,13 +50,16 @@ func Login(c *gin.Context) {
 		}
 	}
 
-	token, err := services.GenerateJWT(user.ID)
+	token, err := services.GenerateJWT(user.ID, user.Role.Name)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถสร้างโทเค็นได้ โปรดลองใหม่ภายหลัง"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"token": token})
+	c.JSON(http.StatusOK, gin.H{
+		"token": token,
+		"role":  user.Role.Name,
+	})
 }
 
 func ValidateTOTP(code string, secret string) bool {
@@ -90,7 +94,7 @@ func EnableTwoFA(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"qr_url": qrURL,
+		"qr_url":  qrURL,
 		"message": "กรุณาสแกน QR ด้วยแอป Authenticator แล้วใส่รหัส 6 หลักเพื่อยืนยัน",
 	})
 }
@@ -111,7 +115,8 @@ func ConfirmEnableTwoFA(c *gin.Context) {
 		return
 	}
 
-	if !services.ValidateTOTP(user.TwoFASecret, input.Code) {
+	// แก้การเรียก ValidateTOTP ให้ argument ถูกต้อง (code ก่อน secret)
+	if !services.ValidateTOTP(input.Code, user.TwoFASecret) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "รหัส 2FA ไม่ถูกต้อง"})
 		return
 	}
@@ -129,8 +134,8 @@ func Profile(c *gin.Context) {
 	userID := c.MustGet("userID").(uint)
 
 	var user models.User
-	if err := config.DB.First(&user, userID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบข้อมูลผู้ใช้"})
+	if err := config.DB.Preload("Role").First(&user, userID).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่พบข้อมูลผู้ใช้"})
 		return
 	}
 
@@ -150,6 +155,51 @@ func Profile(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, resp)
+}
+
+func UpdateOwnProfile(c *gin.Context) {
+	userID := c.MustGet("userID").(uint)
+
+	// จำกัดขนาดรูปภาพไม่เกิน 10MB
+	if err := c.Request.ParseMultipartForm(10 << 20); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ไม่สามารถอ่านข้อมูลได้"})
+		return
+	}
+
+	firstName := c.PostForm("first_name")
+	lastName := c.PostForm("last_name")
+
+	file, _, err := c.Request.FormFile("profile_image")
+	var imageData []byte
+	if err == nil {
+		defer file.Close()
+		imageData, err = io.ReadAll(file)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "ไม่สามารถอ่านรูปภาพได้"})
+			return
+		}
+	}
+
+	// ดึงข้อมูล user
+	var user models.User
+	if err := config.DB.First(&user, userID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบผู้ใช้"})
+		return
+	}
+
+	// อัปเดตข้อมูลที่แก้
+	user.FirstName = firstName
+	user.LastName = lastName
+	if len(imageData) > 0 {
+		user.ProfileImage = imageData
+	}
+
+	if err := config.DB.Save(&user).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกข้อมูลได้"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "อัปเดตข้อมูลสำเร็จ"})
 }
 
 func RefreshToken(c *gin.Context) {
@@ -186,7 +236,14 @@ func RefreshToken(c *gin.Context) {
 		return
 	}
 
-	newAccessToken, err := services.GenerateJWT(userID)
+	// โหลด user และ role ก่อน เพื่อส่ง role name ไป GenerateJWT
+	var user models.User
+	if err := config.DB.Preload("Role").First(&user, userID).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่พบข้อมูลผู้ใช้"})
+		return
+	}
+
+	newAccessToken, err := services.GenerateJWT(user.ID, user.Role.Name)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถสร้าง Access token ใหม่ได้"})
 		return
@@ -199,7 +256,10 @@ func RefreshToken(c *gin.Context) {
 	}
 
 	// อัปเดต Refresh token ใหม่ในฐานข้อมูล
-	config.DB.Model(&tokenRecord).Update("token", newRefreshToken)
+	if err := config.DB.Model(&tokenRecord).Update("token", newRefreshToken).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถอัปเดต Refresh token ใหม่ได้"})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"access_token":  newAccessToken,
@@ -319,7 +379,7 @@ func VerifyUser(c *gin.Context) {
 		Password:     userVerif.Password,
 		FirstName:    userVerif.FirstName,
 		LastName:     userVerif.LastName,
-		RoleID:       4,
+		RoleID:       4, // กำหนด role เริ่มต้นเป็น user ปกติ
 		ProfileImage: userVerif.Image,
 	}
 
@@ -328,6 +388,7 @@ func VerifyUser(c *gin.Context) {
 		return
 	}
 
+	// ลบข้อมูลการยืนยัน OTP ทิ้ง
 	config.DB.Exec("DELETE FROM user_verifications WHERE gmail = ?", input.Gmail)
 
 	c.JSON(http.StatusOK, gin.H{"message": "สมัครสมาชิกและยืนยันสำเร็จ"})

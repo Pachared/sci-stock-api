@@ -7,10 +7,10 @@ import (
 )
 
 func main() {
-	config.Connect()
+	config.Connect() // เซ็ต config.DB
 
 	router := gin.Default()
-	routes.SetupRoutes(router)
+	routes.SetupRoutes(router)  // ส่งแค่ router
 
 	router.Run(":8080")
 }
