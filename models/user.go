@@ -18,11 +18,11 @@ type User struct {
 
 type UserProfileResponse struct {
 	Gmail        string `json:"gmail"`
-	FirstName    string `json:"first_name"`
-	LastName     string `json:"last_name"`
-	RoleID       uint   `json:"role_id"`
-	RoleName     string `json:"role_name"`
-	ProfileImage string `json:"profile_image"`
+	FirstName    string `json:"firstName"`
+	LastName     string `json:"lastName"`
+	RoleID       uint   `json:"roleId"`
+	RoleName     string `json:"roleName"`
+	ProfileImage string `json:"profileImage"`
 }
 
 type RefreshToken struct {
