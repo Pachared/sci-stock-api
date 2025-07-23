@@ -97,3 +97,11 @@ type ErrorResponse struct {
     Error string `json:"error"`
 }
 
+type ProductInput struct {
+	ProductName  string  `form:"product_name" binding:"required"`
+	Barcode      string  `form:"barcode" binding:"required"`
+	Price        float64 `form:"price" binding:"required"`
+	Cost         float64 `form:"cost" binding:"required"`
+	Stock        int     `form:"stock"`
+	ReorderLevel int     `form:"reorder_level"`
+}

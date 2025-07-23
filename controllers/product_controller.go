@@ -9,7 +9,6 @@ import (
 	"sci-stock-api/models"
 )
 
-// map category => table model
 var productTables = map[string]interface{}{
 	"dried_food":  &[]models.DriedFood{},
 	"fresh_food":  &[]models.FreshFood{},
@@ -20,18 +19,51 @@ var productTables = map[string]interface{}{
 
 func GetProductsByCategory(c *gin.Context) {
 	category := c.Param("category")
-	products, exists := productTables[category]
-	if !exists {
+
+	switch category {
+	case "dried_food":
+		var products []models.DriedFood
+		if err := config.DB.Find(&products).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot fetch products"})
+			return
+		}
+		c.JSON(http.StatusOK, products)
+
+	case "fresh_food":
+		var products []models.FreshFood
+		if err := config.DB.Find(&products).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot fetch products"})
+			return
+		}
+		c.JSON(http.StatusOK, products)
+
+	case "snack":
+		var products []models.Snack
+		if err := config.DB.Find(&products).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot fetch products"})
+			return
+		}
+		c.JSON(http.StatusOK, products)
+
+	case "soft_drink":
+		var products []models.SoftDrink
+		if err := config.DB.Find(&products).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot fetch products"})
+			return
+		}
+		c.JSON(http.StatusOK, products)
+
+	case "stationery":
+		var products []models.Stationery
+		if err := config.DB.Find(&products).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot fetch products"})
+			return
+		}
+		c.JSON(http.StatusOK, products)
+
+	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid category"})
-		return
 	}
-
-	if err := config.DB.Find(products).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot fetch products"})
-		return
-	}
-
-	c.JSON(http.StatusOK, products)
 }
 
 func CreateProductByCategory(c *gin.Context) {
@@ -42,26 +74,17 @@ func CreateProductByCategory(c *gin.Context) {
 		return
 	}
 
-	// Dynamic struct per table
-	var input struct {
-		ProductName   string  `form:"product_name" binding:"required"`
-		Barcode       string  `form:"barcode" binding:"required"`
-		Price         float64 `form:"price" binding:"required"`
-		Cost          float64 `form:"cost" binding:"required"`
-		Stock         int     `form:"stock"`
-		ReorderLevel  int     `form:"reorder_level"`
-	}
-
+	var input models.ProductInput
 	if err := c.ShouldBind(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Handle image upload
-	file, err := c.FormFile("image")
 	var imageURL string
+	file, err := c.FormFile("image")
 	if err == nil {
-		path := "uploads/" + filepath.Base(file.Filename)
+		filename := filepath.Base(file.Filename)
+		path := "uploads/" + filename
 		if err := c.SaveUploadedFile(file, path); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "upload failed"})
 			return
@@ -69,18 +92,66 @@ func CreateProductByCategory(c *gin.Context) {
 		imageURL = path
 	}
 
-	switch category {
-	case "dried_food":
-		config.DB.Create(&models.DriedFood{ProductName: input.ProductName, Barcode: input.Barcode, Price: input.Price, Cost: input.Cost, Stock: input.Stock, ReorderLevel: input.ReorderLevel, ImageURL: imageURL})
-	case "fresh_food":
-		config.DB.Create(&models.FreshFood{ProductName: input.ProductName, Barcode: input.Barcode, Price: input.Price, Cost: input.Cost, Stock: input.Stock, ReorderLevel: input.ReorderLevel, ImageURL: imageURL})
-	case "snack":
-		config.DB.Create(&models.Snack{ProductName: input.ProductName, Barcode: input.Barcode, Price: input.Price, Cost: input.Cost, Stock: input.Stock, ReorderLevel: input.ReorderLevel, ImageURL: imageURL})
-	case "soft_drink":
-		config.DB.Create(&models.SoftDrink{ProductName: input.ProductName, Barcode: input.Barcode, Price: input.Price, Cost: input.Cost, Stock: input.Stock, ReorderLevel: input.ReorderLevel, ImageURL: imageURL})
-	case "stationery":
-		config.DB.Create(&models.Stationery{ProductName: input.ProductName, Barcode: input.Barcode, Price: input.Price, Cost: input.Cost, Stock: input.Stock, ReorderLevel: input.ReorderLevel, ImageURL: imageURL})
+	if err := createProduct(category, input, imageURL); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"message": "product created"})
+}
+
+func createProduct(category string, input models.ProductInput, imageURL string) error {
+	switch category {
+	case "dried_food":
+		return config.DB.Create(&models.DriedFood{
+			ProductName:  input.ProductName,
+			Barcode:      input.Barcode,
+			Price:        input.Price,
+			Cost:         input.Cost,
+			Stock:        input.Stock,
+			ReorderLevel: input.ReorderLevel,
+			ImageURL:     imageURL,
+		}).Error
+	case "fresh_food":
+		return config.DB.Create(&models.FreshFood{
+			ProductName:  input.ProductName,
+			Barcode:      input.Barcode,
+			Price:        input.Price,
+			Cost:         input.Cost,
+			Stock:        input.Stock,
+			ReorderLevel: input.ReorderLevel,
+			ImageURL:     imageURL,
+		}).Error
+	case "snack":
+		return config.DB.Create(&models.Snack{
+			ProductName:  input.ProductName,
+			Barcode:      input.Barcode,
+			Price:        input.Price,
+			Cost:         input.Cost,
+			Stock:        input.Stock,
+			ReorderLevel: input.ReorderLevel,
+			ImageURL:     imageURL,
+		}).Error
+	case "soft_drink":
+		return config.DB.Create(&models.SoftDrink{
+			ProductName:  input.ProductName,
+			Barcode:      input.Barcode,
+			Price:        input.Price,
+			Cost:         input.Cost,
+			Stock:        input.Stock,
+			ReorderLevel: input.ReorderLevel,
+			ImageURL:     imageURL,
+		}).Error
+	case "stationery":
+		return config.DB.Create(&models.Stationery{
+			ProductName:  input.ProductName,
+			Barcode:      input.Barcode,
+			Price:        input.Price,
+			Cost:         input.Cost,
+			Stock:        input.Stock,
+			ReorderLevel: input.ReorderLevel,
+			ImageURL:     imageURL,
+		}).Error
+	}
+	return nil
 }

@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	spreadsheetId = "1A8lCV3F-UDFV-a8bRruAM7WOZ1Jp2wiQr-2GbI7jUGc"
+	spreadsheetId = "1_PkqV97P468hg0PODas0VT7e-Bvyl7u6dDfrVPFHHWU"
 	sheetName     = "Sheet1"
 )
 
@@ -27,7 +27,7 @@ var (
 	lastCacheUpdatedAt time.Time
 )
 
-const cacheDuration = 3 * time.Hour
+const cacheDuration = 0
 
 func getSheetsService() (*sheets.Service, error) {
 	ctx := context.Background()
