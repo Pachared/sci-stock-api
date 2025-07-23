@@ -17,3 +17,13 @@ type OrderItem struct {
 	Quantity    int     `json:"quantity"`
 	ImageURL    string  `gorm:"type:longtext" json:"image_url"`
 }
+
+type SaleToday struct {
+	ID          int       `json:"id" gorm:"column:id;primaryKey"`
+	ProductName string    `json:"product_name" gorm:"column:product_name"`
+	Barcode     string    `json:"barcode" gorm:"column:barcode"`
+	Price       float64   `json:"price" gorm:"column:price"`
+	Quantity    int       `json:"quantity" gorm:"column:quantity"`
+	SoldAt      time.Time `json:"sold_at" gorm:"column:sold_at"`
+	ImageURL    *string   `json:"image_url,omitempty" gorm:"column:image_url"`
+}

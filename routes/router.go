@@ -42,7 +42,7 @@ func SetupRoutes(r *gin.Engine) {
 		// จัดการคำสั่งซื้อ
 		api.POST("/orders", controllers.SellProduct)                         // POST /api/orders // สร้างคำสั่งซื้อ (ขายสินค้า)
 		api.GET("/fromsheet", controllers.GetProductsFromSheet)              // GET /api/fromsheet // ดึงข้อมูลสินค้าจาก Google Sheets
-
+		api.GET("/sales_today", controllers.GetSalesToday)
 
 		api.GET("/refresh-cache", middleware.AdminOrSuperAdmin(), controllers.RefreshCache) // GET /api/refresh-cache // รีเฟรชแคชสินค้า (จำกัดสิทธิ์เฉพาะ admin/superadmin)
 

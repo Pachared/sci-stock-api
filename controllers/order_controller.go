@@ -270,3 +270,23 @@ func RefreshCache(c *gin.Context) {
 	})
 }
 
+func GetSalesToday(c *gin.Context) {
+    db := c.MustGet("DB").(*gorm.DB)
+
+    var sales []models.SaleToday
+
+    fmt.Println("DB instance:", db)
+
+    if err := db.Table("sales_today").Find(&sales).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{
+            "error": "ไม่สามารถดึงข้อมูล sales_today ได้: " + err.Error(),
+        })
+        return
+    }
+
+    fmt.Printf("Found %d sales\n", len(sales))
+
+    c.JSON(http.StatusOK, gin.H{
+        "sales_today": sales,
+    })
+}
