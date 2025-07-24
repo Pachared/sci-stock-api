@@ -297,7 +297,6 @@ func UpdateUser(c *gin.Context) {
 		}
 		user.ProfileImage = imageData
 	} else if err != http.ErrMissingFile {
-		// ถ้า error อื่นที่ไม่ใช่ missing file
 		c.JSON(http.StatusBadRequest, gin.H{"error": "อ่านไฟล์รูปภาพไม่สำเร็จ"})
 		return
 	}

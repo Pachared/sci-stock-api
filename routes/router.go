@@ -38,14 +38,15 @@ func SetupRoutes(r *gin.Engine) {
 		// จัดการสินค้าตามหมวดหมู่
 		api.GET("/products/:category", controllers.GetProductsByCategory)    // GET /api/products/:category // ดึงสินค้าในหมวดหมู่
 		api.POST("/products/:category", controllers.CreateProductByCategory) // POST /api/products/:category // เพิ่มสินค้าในหมวดหมู่
-
+		api.POST("/products/:category/bulk", controllers.CreateProductsBulkByCategory)
+	
 		// จัดการคำสั่งซื้อ
 		api.POST("/orders", controllers.SellProduct)                         // POST /api/orders // สร้างคำสั่งซื้อ (ขายสินค้า)
 		api.GET("/fromsheet", controllers.GetProductsFromSheet)              // GET /api/fromsheet // ดึงข้อมูลสินค้าจาก Google Sheets
 		api.GET("/sales_today", controllers.GetSalesToday)
 
 		api.GET("/refresh-cache", middleware.AdminOrSuperAdmin(), controllers.RefreshCache) // GET /api/refresh-cache // รีเฟรชแคชสินค้า (จำกัดสิทธิ์เฉพาะ admin/superadmin)
-
+		api.POST("/auth/refresh", controllers.RefreshAccessToken)
 		// กลุ่มจัดการผู้ใช้ (จำกัดสิทธิ์ admin หรือ superadmin เท่านั้น)
 		usersGroup := api.Group("/users")
 		usersGroup.Use(middleware.AdminOrSuperAdmin()) // middleware ตรวจสอบ role

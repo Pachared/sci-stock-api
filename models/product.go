@@ -8,7 +8,7 @@ type DriedFood struct {
 	Cost         float64 `json:"cost"`
 	Stock        int     `json:"stock"`
 	ReorderLevel int     `json:"reorder_level"`
-	ImageURL     string  `json:"image_url"`
+	ImageURL     string  `gorm:"column:image_url" json:"image_url"`
 }
 
 func (DriedFood) TableName() string {
@@ -23,7 +23,7 @@ type FreshFood struct {
 	Cost         float64 `json:"cost"`
 	Stock        int     `json:"stock"`
 	ReorderLevel int     `json:"reorder_level"`
-	ImageURL     string  `json:"image_url"`
+	ImageURL     string  `gorm:"column:image_url" json:"image_url"`
 }
 
 func (FreshFood) TableName() string {
@@ -38,7 +38,7 @@ type Snack struct {
 	Cost         float64 `json:"cost"`
 	Stock        int     `json:"stock"`
 	ReorderLevel int     `json:"reorder_level"`
-	ImageURL     string  `json:"image_url"`
+	ImageURL     string  `gorm:"column:image_url" json:"image_url"`
 }
 
 func (Snack) TableName() string {
@@ -53,7 +53,7 @@ type SoftDrink struct {
 	Cost         float64 `json:"cost"`
 	Stock        int     `json:"stock"`
 	ReorderLevel int     `json:"reorder_level"`
-	ImageURL     string  `json:"image_url"`
+	ImageURL     string  `gorm:"column:image_url" json:"image_url"`
 }
 
 func (SoftDrink) TableName() string {
@@ -68,7 +68,7 @@ type Stationery struct {
 	Cost         float64 `json:"cost"`
 	Stock        int     `json:"stock"`
 	ReorderLevel int     `json:"reorder_level"`
-	ImageURL     string  `json:"image_url"`
+	ImageURL     string  `gorm:"column:image_url" json:"image_url"`
 }
 
 func (Stationery) TableName() string {
@@ -93,15 +93,17 @@ type ProductResponse struct {
     ImageURL    string  `json:"image_url"`
     Category    string  `json:"category"`
 }
+
 type ErrorResponse struct {
     Error string `json:"error"`
 }
 
 type ProductInput struct {
-	ProductName  string  `form:"product_name" binding:"required"`
-	Barcode      string  `form:"barcode" binding:"required"`
-	Price        float64 `form:"price" binding:"required"`
-	Cost         float64 `form:"cost" binding:"required"`
-	Stock        int     `form:"stock"`
-	ReorderLevel int     `form:"reorder_level"`
+	ProductName  string  `json:"product_name" binding:"required"`
+	Barcode      string  `json:"barcode" binding:"required"`
+	Price        float64 `json:"price" binding:"required"`
+	Cost         float64 `json:"cost" binding:"required"`
+	Stock        int     `json:"stock"`
+	ReorderLevel int     `json:"reorder_level"`
+	ImageURL     string  `json:"image_url"`
 }

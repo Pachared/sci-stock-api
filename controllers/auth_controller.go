@@ -93,7 +93,6 @@ func EnableTwoFA(c *gin.Context) {
 		return
 	}
 
-	// บันทึก secret ลง DB ชั่วคราวก่อนผู้ใช้จะยืนยัน
 	user.TwoFASecret = secret
 	if err := config.DB.Save(&user).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกข้อมูล 2FA ได้"})
@@ -122,7 +121,6 @@ func ConfirmEnableTwoFA(c *gin.Context) {
 		return
 	}
 
-	// แก้การเรียก ValidateTOTP ให้ argument ถูกต้อง (code ก่อน secret)
 	if !services.ValidateTOTP(input.Code, user.TwoFASecret) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "รหัส 2FA ไม่ถูกต้อง"})
 		return
@@ -168,7 +166,6 @@ func Profile(c *gin.Context) {
 func UpdateOwnProfile(c *gin.Context) {
 	userID := c.MustGet("userID").(uint)
 
-	// จำกัดขนาดรูปภาพไม่เกิน 10MB
 	if err := c.Request.ParseMultipartForm(10 << 20); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ไม่สามารถอ่านข้อมูลได้"})
 		return
@@ -188,14 +185,12 @@ func UpdateOwnProfile(c *gin.Context) {
 		}
 	}
 
-	// ดึงข้อมูล user
 	var user models.User
 	if err := config.DB.First(&user, userID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบผู้ใช้"})
 		return
 	}
 
-	// อัปเดตข้อมูลที่แก้
 	user.FirstName = firstName
 	user.LastName = lastName
 	if len(imageData) > 0 {
@@ -244,7 +239,6 @@ func RefreshToken(c *gin.Context) {
 		return
 	}
 
-	// โหลด user และ role ก่อน เพื่อส่ง role name ไป GenerateJWT
 	var user models.User
 	if err := config.DB.Preload("Role").First(&user, userID).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่พบข้อมูลผู้ใช้"})
@@ -263,7 +257,6 @@ func RefreshToken(c *gin.Context) {
 		return
 	}
 
-	// อัปเดต Refresh token ใหม่ในฐานข้อมูล
 	if err := config.DB.Model(&tokenRecord).Update("token", newRefreshToken).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถอัปเดต Refresh token ใหม่ได้"})
 		return
@@ -387,7 +380,7 @@ func VerifyUser(c *gin.Context) {
 		Password:     userVerif.Password,
 		FirstName:    userVerif.FirstName,
 		LastName:     userVerif.LastName,
-		RoleID:       4, // กำหนด role เริ่มต้นเป็น user ปกติ
+		RoleID:       4,
 		ProfileImage: userVerif.Image,
 	}
 
@@ -396,8 +389,43 @@ func VerifyUser(c *gin.Context) {
 		return
 	}
 
-	// ลบข้อมูลการยืนยัน OTP ทิ้ง
 	config.DB.Exec("DELETE FROM user_verifications WHERE gmail = ?", input.Gmail)
 
 	c.JSON(http.StatusOK, gin.H{"message": "สมัครสมาชิกและยืนยันสำเร็จ"})
+}
+
+func RefreshAccessToken(c *gin.Context) {
+	var req struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+
+	claims, err := services.ParseRefreshToken(req.RefreshToken)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid refresh token"})
+		return
+	}
+
+	var rt models.RefreshToken
+	if err := config.DB.Where("user_id = ? AND token = ?", claims.UserID, req.RefreshToken).First(&rt).Error; err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh token not found"})
+		return
+	}
+
+	user := models.User{}
+	config.DB.First(&user, claims.UserID)
+
+	newToken, err := services.GenerateJWT(user.ID, user.Role.Name)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not create token"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"access_token": newToken,
+	})
 }

@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"net/http"
-	"path/filepath"
 
 	"github.com/gin-gonic/gin"
 	"sci-stock-api/config"
@@ -74,33 +73,28 @@ func CreateProductByCategory(c *gin.Context) {
 		return
 	}
 
-	var input models.ProductInput
-	if err := c.ShouldBind(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
+	var inputs []models.ProductInput
 
-	var imageURL string
-	file, err := c.FormFile("image")
-	if err == nil {
-		filename := filepath.Base(file.Filename)
-		path := "uploads/" + filename
-		if err := c.SaveUploadedFile(file, path); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "upload failed"})
+	if err := c.ShouldBindJSON(&inputs); err != nil {
+		var singleInput models.ProductInput
+		if err2 := c.ShouldBindJSON(&singleInput); err2 != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid input format"})
 			return
 		}
-		imageURL = path
+		inputs = []models.ProductInput{singleInput}
 	}
 
-	if err := createProduct(category, input, imageURL); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+	for _, input := range inputs {
+		if err := createProduct(category, input); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": "product created"})
+	c.JSON(http.StatusCreated, gin.H{"message": "product(s) created"})
 }
 
-func createProduct(category string, input models.ProductInput, imageURL string) error {
+func createProduct(category string, input models.ProductInput) error {
 	switch category {
 	case "dried_food":
 		return config.DB.Create(&models.DriedFood{
@@ -110,7 +104,7 @@ func createProduct(category string, input models.ProductInput, imageURL string) 
 			Cost:         input.Cost,
 			Stock:        input.Stock,
 			ReorderLevel: input.ReorderLevel,
-			ImageURL:     imageURL,
+			ImageURL:     input.ImageURL,
 		}).Error
 	case "fresh_food":
 		return config.DB.Create(&models.FreshFood{
@@ -120,7 +114,7 @@ func createProduct(category string, input models.ProductInput, imageURL string) 
 			Cost:         input.Cost,
 			Stock:        input.Stock,
 			ReorderLevel: input.ReorderLevel,
-			ImageURL:     imageURL,
+			ImageURL:     input.ImageURL,
 		}).Error
 	case "snack":
 		return config.DB.Create(&models.Snack{
@@ -130,7 +124,7 @@ func createProduct(category string, input models.ProductInput, imageURL string) 
 			Cost:         input.Cost,
 			Stock:        input.Stock,
 			ReorderLevel: input.ReorderLevel,
-			ImageURL:     imageURL,
+			ImageURL:     input.ImageURL,
 		}).Error
 	case "soft_drink":
 		return config.DB.Create(&models.SoftDrink{
@@ -140,7 +134,7 @@ func createProduct(category string, input models.ProductInput, imageURL string) 
 			Cost:         input.Cost,
 			Stock:        input.Stock,
 			ReorderLevel: input.ReorderLevel,
-			ImageURL:     imageURL,
+			ImageURL:     input.ImageURL,
 		}).Error
 	case "stationery":
 		return config.DB.Create(&models.Stationery{
@@ -150,8 +144,33 @@ func createProduct(category string, input models.ProductInput, imageURL string) 
 			Cost:         input.Cost,
 			Stock:        input.Stock,
 			ReorderLevel: input.ReorderLevel,
-			ImageURL:     imageURL,
+			ImageURL:     input.ImageURL,
 		}).Error
 	}
 	return nil
+}
+
+func CreateProductsBulkByCategory(c *gin.Context) {
+	category := c.Param("category")
+
+	_, exists := productTables[category]
+	if !exists {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid category"})
+		return
+	}
+
+	var inputs []models.ProductInput
+	if err := c.ShouldBindJSON(&inputs); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	for _, input := range inputs {
+		if err := createProduct(category, input); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"message": "bulk products created"})
 }

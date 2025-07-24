@@ -11,7 +11,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// ส่ง OTP สำหรับรีเซ็ตรหัสผ่าน
 func ForgotPassword(c *gin.Context) {
 	var input struct {
 		Gmail string `json:"gmail" binding:"required,email"`
@@ -24,16 +23,13 @@ func ForgotPassword(c *gin.Context) {
 	loc, _ := time.LoadLocation("Asia/Bangkok")
 	now := time.Now().In(loc)
 
-	// ลบ OTP เก่าของอีเมลนี้ก่อน เพื่อไม่ให้มีหลายแถวซ้ำ
 	if err := config.DB.Exec("DELETE FROM password_resets WHERE gmail = ?", input.Gmail).Error; err != nil {
 		log.Println("Error deleting old OTP:", err)
-		// ไม่ return error ให้ user รู้ อาจเพราะไม่มีข้อมูลเก่าก็ได้
 	}
 
 	otp := services.GenerateOTP(6)
 	expire := now.Add(10 * time.Minute)
 
-	// บันทึก OTP ใหม่ลงฐานข้อมูล
 	err := config.DB.Exec(`
 		INSERT INTO password_resets (gmail, otp, expires_at, created_at)
 		VALUES (?, ?, ?, ?)
@@ -54,7 +50,6 @@ func ForgotPassword(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "ส่งรหัส OTP ไปยังอีเมลแล้ว"})
 }
 
-// รีเซ็ตรหัสผ่านโดยตรวจสอบ OTP
 func ResetPassword(c *gin.Context) {
 	var input struct {
 		Gmail       string `json:"gmail" binding:"required,email"`
@@ -80,7 +75,6 @@ func ResetPassword(c *gin.Context) {
 		WHERE gmail = ? ORDER BY created_at DESC LIMIT 1
 	`, input.Gmail).Scan(&otpEntry).Error
 
-	// ตรวจสอบว่าพบ OTP ในฐานข้อมูล
 	if err != nil {
 		log.Println("Error querying OTP:", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ไม่พบ OTP"})
@@ -91,19 +85,16 @@ func ResetPassword(c *gin.Context) {
 		return
 	}
 
-	// ตรวจสอบ OTP ว่าตรงกันหรือไม่
 	if otpEntry.OTP != input.OTP {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "OTP ไม่ถูกต้อง"})
 		return
 	}
 
-	// ตรวจสอบว่า OTP หมดอายุหรือยัง
 	if now.After(otpEntry.ExpiresAt) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "OTP หมดอายุแล้ว"})
 		return
 	}
 
-	// เข้ารหัสรหัสผ่านใหม่
 	hashed, err := services.HashPassword(input.NewPassword)
 	if err != nil {
 		log.Println("Error hashing password:", err)
@@ -111,23 +102,19 @@ func ResetPassword(c *gin.Context) {
 		return
 	}
 
-	// อัปเดตรหัสผ่านในตารางผู้ใช้
 	if err := config.DB.Model(&models.User{}).Where("gmail = ?", input.Gmail).Update("password", hashed).Error; err != nil {
 		log.Println("Error updating password:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถเปลี่ยนรหัสผ่านได้"})
 		return
 	}
 
-	// ลบ OTP หลังใช้งานแล้ว
 	if err := config.DB.Exec("DELETE FROM password_resets WHERE gmail = ?", input.Gmail).Error; err != nil {
 		log.Println("Error deleting used OTP:", err)
-		// ไม่ต้อง return error user เพราะเปลี่ยนรหัสผ่านสำเร็จแล้ว
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "เปลี่ยนรหัสผ่านเรียบร้อยแล้ว"})
 }
 
-// เปลี่ยนรหัสผ่านของตัวเอง (ต้อง login)
 func ChangeOwnPassword(c *gin.Context) {
 	var input struct {
 		OldPassword string `json:"old_password" binding:"required"`
@@ -146,19 +133,16 @@ func ChangeOwnPassword(c *gin.Context) {
 		return
 	}
 
-	// เช็ครหัสผ่านเก่าให้ถูกต้องก่อน
 	if !services.CheckPasswordHash(input.OldPassword, user.Password) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "รหัสผ่านเดิมไม่ถูกต้อง"})
 		return
 	}
 
-	// ตรวจสอบ new password ไม่ให้ซ้ำกับ old password
 	if input.OldPassword == input.NewPassword {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "รหัสผ่านใหม่ต้องไม่เหมือนรหัสผ่านเก่า"})
 		return
 	}
 
-	// เข้ารหัสรหัสผ่านใหม่
 	hashed, err := services.HashPassword(input.NewPassword)
 	if err != nil {
 		log.Println("Error hashing new password:", err)
@@ -166,7 +150,6 @@ func ChangeOwnPassword(c *gin.Context) {
 		return
 	}
 
-	// อัปเดต password
 	if err := config.DB.Model(&user).Update("password", hashed).Error; err != nil {
 		log.Println("Error updating password:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "เปลี่ยนรหัสผ่านไม่สำเร็จ"})
@@ -176,7 +159,6 @@ func ChangeOwnPassword(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "เปลี่ยนรหัสผ่านเรียบร้อยแล้ว"})
 }
 
-// Admin เปลี่ยนรหัสผ่านให้ผู้ใช้คนอื่น
 func AdminChangeUserPassword(c *gin.Context) {
 	userID := c.MustGet("userID").(uint)
 
@@ -187,7 +169,6 @@ func AdminChangeUserPassword(c *gin.Context) {
 		return
 	}
 
-	// เช็คสิทธิ์ admin (roleID <= 2)
 	if currentUser.RoleID > 2 {
 		c.JSON(http.StatusForbidden, gin.H{"error": "คุณไม่มีสิทธิ์เปลี่ยนรหัสผ่านให้ผู้อื่น"})
 		return
@@ -209,13 +190,11 @@ func AdminChangeUserPassword(c *gin.Context) {
 		return
 	}
 
-	// admin ไม่สามารถเปลี่ยนรหัสผ่าน admin หรือ superadmin
 	if currentUser.RoleID == 2 && targetUser.RoleID <= 2 {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Admin ไม่สามารถเปลี่ยนรหัสผ่านของ Admin หรือ Superadmin ได้"})
 		return
 	}
 
-	// เข้ารหัสรหัสผ่านใหม่
 	hashed, err := services.HashPassword(input.NewPassword)
 	if err != nil {
 		log.Println("Error hashing password:", err)
@@ -223,14 +202,11 @@ func AdminChangeUserPassword(c *gin.Context) {
 		return
 	}
 
-	// อัปเดตรหัสผ่านเป้าหมาย
 	if err := config.DB.Model(&targetUser).Update("password", hashed).Error; err != nil {
 		log.Println("Error updating target user password:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถเปลี่ยนรหัสผ่านได้"})
 		return
 	}
-
-	// TODO: เพิ่ม log หรือ audit ที่นี่ เช่น บันทึกว่า currentUser เปลี่ยนรหัสผ่าน targetUser
 
 	c.JSON(http.StatusOK, gin.H{"message": "เปลี่ยนรหัสผ่านสำเร็จ"})
 }

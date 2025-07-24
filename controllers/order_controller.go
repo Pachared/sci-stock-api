@@ -188,7 +188,7 @@ func SellProduct(c *gin.Context) {
 	}
 
 	if err := deleteBarcodeFromSheet(product.Barcode); err != nil {
-		log.Printf("⚠️ ลบ barcode %s จาก Google Sheet ไม่สำเร็จ: %v\n", product.Barcode, err)
+		log.Printf("ลบ barcode %s จาก Google Sheet ไม่สำเร็จ: %v\n", product.Barcode, err)
 	} else {
 		clearCache()
 	}

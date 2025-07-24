@@ -110,7 +110,6 @@ func SuperAdminOnly() gin.HandlerFunc {
 	}
 }
 
-// หรือถ้าต้องการให้ middleware อนุญาตทั้ง admin และ superadmin ก็ทำแบบนี้ได้
 func AdminOrSuperAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role, exists := c.Get("role")
