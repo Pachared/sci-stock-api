@@ -3,6 +3,7 @@ package services
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -16,9 +17,18 @@ var (
 )
 
 func init() {
-	_ = godotenv.Load()
+	err := godotenv.Load()
+	if err != nil {
+		fmt.Println("[INFO] .env not loaded, using system environment")
+	}
 
 	supportPassword = os.Getenv("SUPPORT_EMAIL_PASSWORD")
+	supportPassword = strings.TrimSpace(supportPassword)
+	supportPassword = strings.ReplaceAll(supportPassword, " ", "")
+
+	if supportPassword == "" {
+		fmt.Println("[ERROR] SUPPORT_EMAIL_PASSWORD is empty or not set!")
+	}
 }
 
 func SendEmail(to, subject, htmlBody, plainText string) error {
@@ -26,15 +36,15 @@ func SendEmail(to, subject, htmlBody, plainText string) error {
 	m.SetAddressHeader("From", supportEmail, supportName)
 	m.SetHeader("To", to)
 	m.SetHeader("Subject", subject)
-	m.SetBody("text/html", htmlBody)
+	m.SetBody("text/plain", plainText)
+	m.AddAlternative("text/html", htmlBody)
 
 	d := gomail.NewDialer("smtp.gmail.com", 587, supportEmail, supportPassword)
 
-	err := d.DialAndSend(m)
-	if err != nil {
+	if err := d.DialAndSend(m); err != nil {
+		fmt.Printf("[ERROR] SendEmail failed: %v\n", err)
 		return err
 	}
-
 	return nil
 }
 
@@ -52,7 +62,7 @@ func GenerateEmailBodyForOTP(otp string) (string, string) {
 				<td align="center">
 					<table border="0" cellpadding="0" cellspacing="0" width="420" style="background:#ffffff; border-radius:12px; padding:40px; font-family:'Noto Sans Thai', sans-serif;">
 						<tr>
-							<td align="center" style="color:#5419B5; font-size:24px; font-weight:bold; padding-bottom:20px;">
+							<td align="center" style="color:#000000; font-size:24px; font-weight:bold; padding-bottom:20px;">
 								รหัส OTP สำหรับเปลี่ยนรหัสผ่าน
 							</td>
 						</tr>
@@ -62,7 +72,7 @@ func GenerateEmailBodyForOTP(otp string) (string, string) {
 							</td>
 						</tr>
 						<tr>
-							<td align="center" style="background:#E1DFE9; color:#8739F9; font-size:32px; font-weight:bold; padding:20px 40px; border-radius:40px; letter-spacing:12px; margin-bottom:30px;">
+							<td align="center" style="background:#E1DFE9; color:#000000; font-size:32px; font-weight:bold; padding:20px 40px; border-radius:40px; letter-spacing:12px; margin-bottom:30px;">
 								%s
 							</td>
 						</tr>
@@ -73,7 +83,7 @@ func GenerateEmailBodyForOTP(otp string) (string, string) {
 						</tr>
 						<tr>
 							<td align="center">
-								<a href="#" style="background-color:#5419B5; color:#ffffff; padding:12px 30px; text-decoration:none; border-radius:20px; font-size:16px; font-weight:bold; display:inline-block;">เปลี่ยนรหัสผ่าน</a>
+								<a href="#" style="background-color:#000000; color:#ffffff; padding:12px 30px; text-decoration:none; border-radius:20px; font-size:16px; font-weight:bold; display:inline-block;">เปลี่ยนรหัสผ่าน</a>
 							</td>
 						</tr>
 						<tr>
@@ -108,7 +118,7 @@ func GenerateEmailBodyForRegisterOTP(otp string) (string, string) {
 				<td align="center">
 					<table border="0" cellpadding="0" cellspacing="0" width="420" style="background:#ffffff; border-radius:12px; padding:40px; font-family:'Noto Sans Thai', sans-serif;">
 						<tr>
-							<td align="center" style="color:#5419B5; font-size:24px; font-weight:bold; padding-bottom:20px;">
+							<td align="center" style="color:#000000; font-size:24px; font-weight:bold; padding-bottom:20px;">
 								ยืนยันการสมัครสมาชิก
 							</td>
 						</tr>
@@ -118,7 +128,7 @@ func GenerateEmailBodyForRegisterOTP(otp string) (string, string) {
 							</td>
 						</tr>
 						<tr>
-							<td align="center" style="background:#E1DFE9; color:#8739F9; font-size:32px; font-weight:bold; padding:20px 40px; border-radius:40px; letter-spacing:12px; margin-bottom:30px;">
+							<td align="center" style="background:#E1DFE9; color:#000000; font-size:32px; font-weight:bold; padding:20px 40px; border-radius:40px; letter-spacing:12px; margin-bottom:30px;">
 								%s
 							</td>
 						</tr>
@@ -129,7 +139,7 @@ func GenerateEmailBodyForRegisterOTP(otp string) (string, string) {
 						</tr>
 						<tr>
 							<td align="center">
-								<a href="#" style="background-color:#5419B5; color:#ffffff; padding:12px 30px; text-decoration:none; border-radius:20px; font-size:16px; font-weight:bold; display:inline-block;">เข้าสู่ระบบ</a>
+								<a href="#" style="background-color:#000000; color:#ffffff; padding:12px 30px; text-decoration:none; border-radius:20px; font-size:16px; font-weight:bold; display:inline-block;">เข้าสู่ระบบ</a>
 							</td>
 						</tr>
 						<tr>
