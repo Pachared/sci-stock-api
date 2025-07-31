@@ -39,6 +39,8 @@ func SetupRoutes(r *gin.Engine) {
 		api.GET("/products/:category", controllers.GetProductsByCategory)    // GET /api/products/:category // ดึงสินค้าในหมวดหมู่
 		api.POST("/products/:category", controllers.CreateProductByCategory) // POST /api/products/:category // เพิ่มสินค้าในหมวดหมู่
 		api.POST("/products/:category/bulk", controllers.CreateProductsBulkByCategory)
+		api.PUT("/products/:category/:barcode", controllers.UpdateProductByCategory)
+		api.DELETE("/products/:category/:barcode", controllers.DeleteProductByCategory)
 
 		// จัดการคำสั่งซื้อ
 		api.POST("/orders", controllers.SellProduct)            // POST /api/orders // สร้างคำสั่งซื้อ (ขายสินค้า)
