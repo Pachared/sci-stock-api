@@ -48,8 +48,7 @@ func SetupRoutes(r *gin.Engine) {
 		api.GET("/sales_today", controllers.GetSalesToday)
 
 		api.GET("/refresh-cache", middleware.AdminOrSuperAdmin(), controllers.RefreshCache) // GET /api/refresh-cache // รีเฟรชแคชสินค้า (จำกัดสิทธิ์เฉพาะ admin/superadmin)
-		api.POST("/auth/refresh", controllers.RefreshAccessToken)
-		// กลุ่มจัดการผู้ใช้ (จำกัดสิทธิ์ admin หรือ superadmin เท่านั้น)
+		api.POST("/auth/refresh", controllers.RefreshAccessToken) // กลุ่มจัดการผู้ใช้ (จำกัดสิทธิ์ admin หรือ superadmin เท่านั้น)
 		usersGroup := api.Group("/users")
 		usersGroup.Use(middleware.AdminOrSuperAdmin()) // middleware ตรวจสอบ role
 
