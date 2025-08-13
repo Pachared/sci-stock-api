@@ -19,8 +19,6 @@ func SetupRoutes(r *gin.Engine) {
 	{
 		auth.POST("/register", controllers.Register)                                                                // POST /auth/register // ลงทะเบียนผู้ใช้ใหม่ (ยังไม่สร้างบัญชีจริง รอ OTP)
 		auth.POST("/login", controllers.Login)                                                                      // POST /auth/login // เข้าสู่ระบบ รับ token
-		auth.POST("/enable-2fa", middleware.JWTAuthMiddleware(), controllers.EnableTwoFA)                           // POST /auth/enable-2fa // เปิดใช้งาน 2FA (ต้อง login)
-		auth.POST("/confirm-2fa", middleware.JWTAuthMiddleware(), controllers.ConfirmEnableTwoFA)                   // POST /auth/confirm-2fa // ยืนยันการเปิดใช้งาน 2FA (ต้อง login)
 		auth.GET("/profile", middleware.JWTAuthMiddleware(), controllers.Profile)                                   // GET /auth/profile // ดูข้อมูลโปรไฟล์ผู้ใช้ (ต้อง login)
 		auth.PUT("/profile", middleware.JWTAuthMiddleware(), controllers.UpdateOwnProfile)                          // PUT /auth/profile // อัปเดตข้อมูลโปรไฟล์ผู้ใช้ (ต้อง login)
 		auth.POST("/refresh", middleware.JWTAuthMiddleware(), controllers.RefreshToken)                             // POST /auth/refresh // รีเฟรช access token (ต้อง login)

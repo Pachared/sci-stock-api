@@ -12,14 +12,12 @@ import (
 	"log"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pquerna/otp/totp"
 )
 
 func Login(c *gin.Context) {
 	var input struct {
-		Gmail     string `json:"gmail" binding:"required,email"`
-		Password  string `json:"password" binding:"required"`
-		TwoFACode string `json:"two_fa_code"`
+		Gmail    string `json:"gmail" binding:"required,email"`
+		Password string `json:"password" binding:"required"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -39,17 +37,6 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	if user.TwoFASecret != "" {
-		if input.TwoFACode == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "กรุณากรอกโค้ด 2FA"})
-			return
-		}
-		if !services.ValidateTOTP(input.TwoFACode, user.TwoFASecret) {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "โค้ด 2FA ไม่ถูกต้อง"})
-			return
-		}
-	}
-
 	token, err := services.GenerateJWT(user.ID, user.Role.Name)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถสร้าง access token ได้"})
@@ -67,72 +54,6 @@ func Login(c *gin.Context) {
 		"refresh_token": refreshToken,
 		"role":          user.Role.Name,
 	})
-}
-
-func ValidateTOTP(code string, secret string) bool {
-	return totp.Validate(code, secret)
-}
-
-func EnableTwoFA(c *gin.Context) {
-	userID := c.MustGet("userID").(uint)
-
-	var user models.User
-	if err := config.DB.First(&user, userID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบผู้ใช้"})
-		return
-	}
-
-	if user.TwoFAEnabled {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "คุณเปิดใช้งาน 2FA อยู่แล้ว"})
-		return
-	}
-
-	secret, qrURL, err := services.GenerateTwoFA(user.Gmail)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถสร้างรหัส 2FA ได้"})
-		return
-	}
-
-	user.TwoFASecret = secret
-	if err := config.DB.Save(&user).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกข้อมูล 2FA ได้"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"qr_url":  qrURL,
-		"message": "กรุณาสแกน QR ด้วยแอป Authenticator แล้วใส่รหัส 6 หลักเพื่อยืนยัน",
-	})
-}
-
-func ConfirmEnableTwoFA(c *gin.Context) {
-	userID := c.MustGet("userID").(uint)
-	var input struct {
-		Code string `json:"code" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "กรุณากรอกรหัส 2FA"})
-		return
-	}
-
-	var user models.User
-	if err := config.DB.First(&user, userID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบผู้ใช้"})
-		return
-	}
-
-	if !services.ValidateTOTP(input.Code, user.TwoFASecret) {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "รหัส 2FA ไม่ถูกต้อง"})
-		return
-	}
-
-	user.TwoFAEnabled = true
-	if err := config.DB.Save(&user).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถเปิดใช้งาน 2FA ได้"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "เปิดใช้งาน 2FA สำเร็จ"})
 }
 
 func Profile(c *gin.Context) {
@@ -400,19 +321,19 @@ func RefreshAccessToken(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "คำขอไม่ถูกต้อง"})
 		return
 	}
 
 	claims, err := services.ParseRefreshToken(req.RefreshToken)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid refresh token"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token ไม่ถูกต้องหรือหมดอายุ"})
 		return
 	}
 
 	var rt models.RefreshToken
 	if err := config.DB.Where("user_id = ? AND token = ?", claims.UserID, req.RefreshToken).First(&rt).Error; err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh token not found"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "ไม่พบ Refresh token ในระบบ"})
 		return
 	}
 
@@ -421,7 +342,7 @@ func RefreshAccessToken(c *gin.Context) {
 
 	newToken, err := services.GenerateJWT(user.ID, user.Role.Name)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not create token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถสร้าง Access token ได้"})
 		return
 	}
 
