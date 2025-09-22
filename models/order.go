@@ -27,3 +27,11 @@ type SaleToday struct {
 	SoldAt      time.Time `json:"sold_at" gorm:"column:sold_at"`
 	ImageURL    *string   `json:"image_url,omitempty" gorm:"column:image_url"`
 }
+
+type DailyPayment struct {
+	ID          uint      `json:"id" gorm:"primaryKey;autoIncrement"`
+	ItemName    string    `json:"item_name" gorm:"column:item_name;not null"`
+	Amount      float64   `json:"amount" gorm:"not null"`
+	PaymentDate string    `json:"payment_date" gorm:"not null;type:date"`
+	CreatedAt   time.Time `json:"created_at" gorm:"autoCreateTime"`
+}

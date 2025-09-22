@@ -43,7 +43,10 @@ func SetupRoutes(r *gin.Engine) {
 		// จัดการคำสั่งซื้อ
 		api.POST("/orders", controllers.SellProduct)            // POST /api/orders // สร้างคำสั่งซื้อ (ขายสินค้า)
 		api.GET("/fromsheet", controllers.GetProductsFromSheet) // GET /api/fromsheet // ดึงข้อมูลสินค้าจาก Google Sheets
-		api.GET("/sales_today", controllers.GetSalesToday)
+		api.GET("/sales_today", controllers.GetSalesToday) 	// GET /api/sales_today // ดึงยอดขายวันนี้
+		api.POST("/sell-local", controllers.SellProductLocal) // POST /api/sell-local // ขายสินค้าแบบออฟไลน์ (บันทึกคำสั่งซื้อจากเครื่องลูกข่าย)
+		api.GET("/product/:barcode", controllers.GetProductByBarcode) // GET /api/product/:barcode // ดึงข้อมูลสินค้าตามบาร์โค้ด
+		api.POST("/daily-payments", controllers.CreateDailyPayment) // POST /api/daily-payments // บันทึกการชำระเงินรายวัน
 
 		api.GET("/refresh-cache", middleware.AdminOrSuperAdmin(), controllers.RefreshCache) // GET /api/refresh-cache // รีเฟรชแคชสินค้า (จำกัดสิทธิ์เฉพาะ admin/superadmin)
 		api.POST("/auth/refresh", controllers.RefreshAccessToken) // กลุ่มจัดการผู้ใช้ (จำกัดสิทธิ์ admin หรือ superadmin เท่านั้น)

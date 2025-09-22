@@ -85,6 +85,33 @@ func FindProductByBarcode(db *gorm.DB, barcode string) (*models.Product, string,
 	return nil, "", fmt.Errorf("ไม่พบสินค้า")
 }
 
+func GetProductByBarcode(c *gin.Context) {
+	db := c.MustGet("DB").(*gorm.DB)
+	barcode := c.Param("barcode")
+	
+	if barcode == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Barcode ไม่ถูกต้อง"})
+		return
+	}
+
+	product, table, err := FindProductByBarcode(db, barcode)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบสินค้า"})
+		return
+	}
+
+	resp := models.ProductResponse{
+		ID:          product.ID,
+		ProductName: product.ProductName,
+		Barcode:     product.Barcode,
+		Price:       product.Price,
+		ImageURL:    product.ImageURL,
+		Category:    table,
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
 func GetProductsFromSheet(c *gin.Context) {
 	db := c.MustGet("DB").(*gorm.DB)
 
@@ -209,6 +236,81 @@ func SellProduct(c *gin.Context) {
 	})
 }
 
+func SellProductLocal(c *gin.Context) {
+    db := c.MustGet("DB").(*gorm.DB)
+
+    var req struct {
+        Barcode  string `json:"barcode"`
+        Quantity int    `json:"quantity"`
+    }
+
+    if err := c.ShouldBindJSON(&req); err != nil {
+        c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "ข้อมูลไม่ถูกต้อง"})
+        return
+    }
+
+    if req.Quantity <= 0 {
+        c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "จำนวนสินค้า (Quantity) ต้องเป็นจำนวนบวก"})
+        return
+    }
+
+    if !isValidBarcode(req.Barcode) {
+        c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Barcode ไม่ถูกต้อง"})
+        return
+    }
+
+    // ดึงสินค้าจากฐานข้อมูลเหมือนเดิม
+    product, table, err := FindProductByBarcode(db, req.Barcode)
+    if err != nil {
+        c.JSON(http.StatusNotFound, models.ErrorResponse{Error: "ไม่พบสินค้า"})
+        return
+    }
+
+    ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+    defer cancel()
+
+    err = db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+        res := tx.Table(table).
+            Where("id = ? AND stock >= ?", product.ID, req.Quantity).
+            UpdateColumn("stock", gorm.Expr("stock - ?", req.Quantity))
+        if res.Error != nil {
+            return res.Error
+        }
+        if res.RowsAffected == 0 {
+            return fmt.Errorf("สต๊อกไม่เพียงพอ")
+        }
+
+        if err := tx.Exec(`
+            INSERT INTO sales_today (product_name, barcode, price, quantity, sold_at, image_url)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+            product.ProductName, product.Barcode, product.Price, req.Quantity, time.Now(), product.ImageURL).Error; err != nil {
+            return err
+        }
+
+        return nil
+    })
+
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: err.Error()})
+        return
+    }
+
+    resp := models.ProductResponse{
+        ID:          product.ID,
+        ProductName: product.ProductName,
+        Barcode:     product.Barcode,
+        Price:       product.Price,
+        ImageURL:    product.ImageURL,
+        Category:    product.Category,
+    }
+
+    c.JSON(http.StatusOK, gin.H{
+        "message":          "ตัดสต๊อกสำเร็จ (Local)",
+        "product":          resp,
+        "stock_remaining": product.Stock - req.Quantity,
+    })
+}
+
 func deleteBarcodeFromSheet(barcode string) error {
 	srv, err := getSheetsService()
 	if err != nil {
@@ -289,4 +391,44 @@ func GetSalesToday(c *gin.Context) {
     c.JSON(http.StatusOK, gin.H{
         "sales_today": sales,
     })
+}
+
+func CreateDailyPayment(c *gin.Context) {
+	db := c.MustGet("DB").(*gorm.DB)
+
+	var payment models.DailyPayment
+
+	if err := c.ShouldBindJSON(&payment); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง: " + err.Error()})
+		return
+	}
+
+	// ถ้าไม่มี PaymentDate ให้ใส่วันที่วันนี้
+	if payment.PaymentDate == "" {
+		payment.PaymentDate = time.Now().Format("2006-01-02")
+	}
+
+	fmt.Printf("Received payment: %+v\n", payment) // log ตรวจสอบ
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
+	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Table("daily_payments").Create(&payment).Error; err != nil {
+			return err
+		}
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	fmt.Printf("Saved payment: %+v\n", payment) // log ตรวจสอบ
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "บันทึกรายการสำเร็จ",
+		"data":    payment,
+	})
 }
