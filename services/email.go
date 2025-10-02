@@ -39,8 +39,8 @@ func SendEmail(to, subject, htmlBody, plainText string) error {
 	m.SetBody("text/plain", plainText)
 	m.AddAlternative("text/html", htmlBody)
 
-	d := gomail.NewDialer("smtp.gmail.com", 465, supportEmail, supportPassword)
-	d.SSL = true
+	d := gomail.NewDialer("smtp.gmail.com", 587, supportEmail, supportPassword)
+	d.SSL = false
 
 	if err := d.DialAndSend(m); err != nil {
 		fmt.Printf("[ERROR] SendEmail failed: %v\n", err)
