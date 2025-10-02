@@ -72,10 +72,7 @@ func Profile(c *gin.Context) {
 		profileImage = ""
 	}
 
-	var roleID uint32 = 0
-	if user.RoleID != nil {
-		roleID = uint32(*user.RoleID)
-	}
+	var roleID uint32 = uint32(user.RoleID)
 
 	resp := models.UserProfileResponse{
 		Gmail:        user.Gmail,
@@ -307,7 +304,7 @@ func VerifyUser(c *gin.Context) {
 		Password:     userVerif.Password,
 		FirstName:    userVerif.FirstName,
 		LastName:     userVerif.LastName,
-		RoleID:       &roleID,
+		RoleID:       roleID,
 		ProfileImage: userVerif.Image,
 	}
 
