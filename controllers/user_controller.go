@@ -169,7 +169,7 @@ func VerifyAndActivateUser(c *gin.Context) {
 	}()
 
 	// 🔹 ใช้ uint ตรง ๆ ไม่ต้อง pointer
-	roleID := uint(verif.RoleID)
+	roleID := uint64(verif.RoleID)
 	user := models.User{
 		Gmail:        verif.Gmail,
 		Password:     verif.Password,
@@ -341,7 +341,7 @@ func UpdateUser(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "role_id ไม่ถูกต้อง"})
 			return
 		}
-		user.RoleID = uint(parsedRoleID) // 🔹 assign ธรรมดา ไม่ต้อง pointer
+		user.RoleID = uint64(parsedRoleID) // 🔹 assign ธรรมดา ไม่ต้อง pointer
 	}
 
 	if err := config.DB.Save(&user).Error; err != nil {

@@ -298,7 +298,7 @@ func VerifyUser(c *gin.Context) {
 		return
 	}
 
-	roleID := uint(4)
+	roleID := uint64(4)
 	user := models.User{
 		Gmail:        userVerif.Gmail,
 		Password:     userVerif.Password,
