@@ -247,7 +247,7 @@ func Register(c *gin.Context) {
 	}
 
 	html, plain := services.GenerateEmailBodyForRegisterOTP(otp)
-	if err := services.SendEmail(gmail, "ยืนยันอีเมลสำหรับสมัครสมาชิก", html, plain); err != nil {
+	if err := services.GoogleSendMail(gmail, "ยืนยันอีเมลสำหรับสมัครสมาชิก", html, plain); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ส่งอีเมล OTP ไม่สำเร็จ"})
 		return
 	}

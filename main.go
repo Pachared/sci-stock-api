@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 
+	"github.com/joho/godotenv"
 	"github.com/gin-gonic/gin"
 	"sci-stock-api/config"
 	"sci-stock-api/models"
@@ -10,11 +11,20 @@ import (
 )
 
 func main() {
+	if err := godotenv.Load(".env"); err != nil {
+		log.Println("No .env file found, reading environment variables from system")
+	}
+
+	gmailConfig, err := config.NewGmailOAuthConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
+	config.GmailOAuthConfig = gmailConfig
+
 	config.Connect()
 	db := config.DB
 
-	err := db.AutoMigrate(&models.Role{}, &models.User{})
-	if err != nil {
+	if err := db.AutoMigrate(&models.Role{}, &models.User{}); err != nil {
 		log.Fatal("Migration failed: ", err)
 	}
 

@@ -108,8 +108,8 @@ func CreateUserRequestByAdmin(c *gin.Context) {
 		return
 	}
 
-	html, plain := services.GenerateEmailBodyForRegisterOTP(otp)
-	if err := services.SendEmail(gmail, "ยืนยัน OTP สำหรับการสร้างบัญชี", html, plain); err != nil {
+	html, plain := services.GenerateEmailBodyForOTP(otp)
+	if err := services.GoogleSendMail(gmail, "ยืนยัน OTP สำหรับการสร้างบัญชี", html, plain); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ส่งอีเมล OTP ไม่สำเร็จ"})
 		return
 	}

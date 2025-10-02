@@ -41,7 +41,7 @@ func ForgotPassword(c *gin.Context) {
 	}
 
 	html, plain := services.GenerateEmailBodyForOTP(otp)
-	if err := services.SendEmail(input.Gmail, "Reset Password OTP", html, plain); err != nil {
+	if err := services.GoogleSendMail(input.Gmail, "Reset Password OTP", html, plain); err != nil {
 		log.Println("Error sending OTP email:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ส่งอีเมลไม่สำเร็จ"})
 		return

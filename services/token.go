@@ -8,21 +8,24 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"sci-stock-api/config"
 	"sci-stock-api/models"
+	"github.com/joho/godotenv"
 )
 
 var JwtSecret []byte
 var RefreshSecret []byte
 
 func init() {
-    accessSecret := os.Getenv("ACCESS_TOKEN_SECRET")
-    refreshSecret := os.Getenv("REFRESH_TOKEN_SECRET")
+	_ = godotenv.Load()
 
-    if accessSecret == "" || refreshSecret == "" {
-        panic("ACCESS_TOKEN_SECRET or REFRESH_TOKEN_SECRET is not set")
-    }
+	accessSecret := os.Getenv("ACCESS_TOKEN_SECRET")
+	refreshSecret := os.Getenv("REFRESH_TOKEN_SECRET")
 
-    JwtSecret = []byte(accessSecret)
-    RefreshSecret = []byte(refreshSecret)
+	if accessSecret == "" || refreshSecret == "" {
+		panic("ACCESS_TOKEN_SECRET or REFRESH_TOKEN_SECRET is not set")
+	}
+
+	JwtSecret = []byte(accessSecret)
+	RefreshSecret = []byte(refreshSecret)
 }
 
 type JWTClaims struct {
@@ -114,4 +117,3 @@ func ParseRefreshToken(tokenStr string) (*RefreshClaims, error) {
 
     return claims, nil
 }
-
