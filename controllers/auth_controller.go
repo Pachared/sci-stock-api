@@ -57,31 +57,31 @@ func Login(c *gin.Context) {
 }
 
 func Profile(c *gin.Context) {
-	userID := c.MustGet("userID").(uint)
+    userID := c.MustGet("userID").(uint) // 👈 เปลี่ยนเป็น uint32
 
-	var user models.User
-	if err := config.DB.Preload("Role").First(&user, userID).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่พบข้อมูลผู้ใช้"})
-		return
-	}
+    var user models.User
+    if err := config.DB.Preload("Role").First(&user, userID).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่พบข้อมูลผู้ใช้"})
+        return
+    }
 
-	var profileImage string
-	if len(user.ProfileImage) > 0 {
-		profileImage = base64.StdEncoding.EncodeToString(user.ProfileImage)
-	} else {
-		profileImage = ""
-	}
+    var profileImage string
+    if len(user.ProfileImage) > 0 {
+        profileImage = base64.StdEncoding.EncodeToString(user.ProfileImage)
+    } else {
+        profileImage = ""
+    }
 
-	resp := models.UserProfileResponse{
-		Gmail:        user.Gmail,
-		FirstName:    user.FirstName,
-		LastName:     user.LastName,
-		RoleID:       user.RoleID,
-		RoleName:     user.Role.Name,
-		ProfileImage: profileImage,
-	}
+    resp := models.UserProfileResponse{
+        Gmail:        user.Gmail,
+        FirstName:    user.FirstName,
+        LastName:     user.LastName,
+        RoleID:       uint32(user.RoleID),
+        RoleName:     user.Role.Name,
+        ProfileImage: profileImage,
+    }
 
-	c.JSON(http.StatusOK, resp)
+    c.JSON(http.StatusOK, resp)
 }
 
 func UpdateOwnProfile(c *gin.Context) {

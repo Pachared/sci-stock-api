@@ -1,14 +1,14 @@
 package controllers
 
 import (
+	"encoding/base64"
+	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 	"io"
 	"log"
 	"net/http"
 	"strconv"
 	"time"
-	"encoding/base64"
-
-	"github.com/gin-gonic/gin"
 
 	"sci-stock-api/config"
 	"sci-stock-api/models"
@@ -170,7 +170,7 @@ func VerifyAndActivateUser(c *gin.Context) {
 		Password:     verif.Password,
 		FirstName:    verif.FirstName,
 		LastName:     verif.LastName,
-		RoleID:       uint(verif.RoleID),
+		RoleID:       uint32(verif.RoleID),
 		ProfileImage: verif.Image,
 	}
 
@@ -202,28 +202,40 @@ func GetUsers(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "ไม่ได้รับอนุญาต"})
 		return
 	}
-	currentRole, ok := roleVal.(string)
-	if !ok {
+
+	var currentRole string
+	switch v := roleVal.(type) {
+	case string:
+		currentRole = v
+	case int:
+		switch v {
+		case 1:
+			currentRole = "superadmin"
+		case 2:
+			currentRole = "admin"
+		default:
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "ข้อมูล role ไม่ถูกต้อง"})
+			return
+		}
+	default:
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "ข้อมูล role ไม่ถูกต้อง"})
 		return
 	}
 
 	var users []models.User
 	if err := config.DB.Preload("Role").Find(&users).Error; err != nil {
-		log.Printf("GetUsers: query error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถดึงข้อมูลผู้ใช้ได้"})
 		return
 	}
 
 	var filteredUsers []models.User
 	for _, user := range users {
+
 		switch currentRole {
 		case "superadmin":
-			if user.Role.Name == "admin" || user.Role.Name == "employee" {
-				filteredUsers = append(filteredUsers, user)
-			}
+			filteredUsers = append(filteredUsers, user)
 		case "admin":
-			if user.Role.Name == "employee" {
+			if user.RoleID == RoleEmployee {
 				filteredUsers = append(filteredUsers, user)
 			}
 		default:
@@ -232,7 +244,7 @@ func GetUsers(c *gin.Context) {
 		}
 	}
 
-	var responses []models.UserProfileResponse
+	responses := make([]models.UserProfileResponse, 0, len(filteredUsers))
 	for _, user := range filteredUsers {
 		var profileImage string
 		if len(user.ProfileImage) > 0 {
@@ -262,16 +274,20 @@ func UpdateUser(c *gin.Context) {
 		return
 	}
 
-	id := c.Param("id")
-
-	var user models.User
-	if err := config.DB.Preload("Role").First(&user, id).Error; err != nil {
-		log.Printf("UpdateUser: ไม่พบ user ID %v: %v", id, err)
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+	gmail := c.Param("gmail")
+	if gmail == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "gmail ไม่ถูกต้อง"})
 		return
 	}
 
-	if currentRole == "admin" && user.Role.Name != "employee" {
+	var user models.User
+	if err := config.DB.Preload("Role").Where("gmail = ?", gmail).First(&user).Error; err != nil {
+		log.Printf("UpdateUser: ไม่พบ user gmail %v: %v", gmail, err)
+		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบผู้ใช้"})
+		return
+	}
+
+	if currentRole == "admin" && user.RoleID != RoleEmployee {
 		c.JSON(http.StatusForbidden, gin.H{"error": "admin แก้ไขได้เฉพาะ employee เท่านั้น"})
 		return
 	} else if currentRole != "admin" && currentRole != "superadmin" {
@@ -284,14 +300,27 @@ func UpdateUser(c *gin.Context) {
 		return
 	}
 
-	user.FirstName = c.PostForm("first_name")
-	user.LastName = c.PostForm("last_name")
+	if firstName := c.PostForm("first_name"); firstName != "" {
+		user.FirstName = firstName
+	}
+	if lastName := c.PostForm("last_name"); lastName != "" {
+		user.LastName = lastName
+	}
+
+	if newPassword := c.PostForm("password"); newPassword != "" {
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "เข้ารหัสรหัสผ่านล้มเหลว"})
+			return
+		}
+		user.Password = string(hashedPassword)
+	}
 
 	file, _, err := c.Request.FormFile("profile_image")
 	if err == nil {
 		defer file.Close()
-		imageData, err := io.ReadAll(file)
-		if err != nil {
+		imageData, readErr := io.ReadAll(file)
+		if readErr != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "อ่านไฟล์รูปภาพไม่สำเร็จ"})
 			return
 		}
@@ -301,16 +330,35 @@ func UpdateUser(c *gin.Context) {
 		return
 	}
 
+	if roleID := c.PostForm("role_id"); roleID != "" {
+		parsedRoleID, err := strconv.ParseUint(roleID, 10, 32)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "role_id ไม่ถูกต้อง"})
+			return
+		}
+		user.RoleID = uint32(parsedRoleID)
+	}
+
 	if err := config.DB.Save(&user).Error; err != nil {
 		log.Printf("UpdateUser: save user error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถอัปเดตผู้ใช้ได้"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "อัปเดตข้อมูลสำเร็จ"})
+	c.JSON(http.StatusOK, gin.H{
+		"message": "อัปเดตข้อมูลสำเร็จ",
+		"user": gin.H{
+			"gmail":      user.Gmail,
+			"first_name": user.FirstName,
+			"last_name":  user.LastName,
+			"role_id":    user.RoleID,
+			"role_name":  user.Role.Name,
+		},
+	})
 }
 
 func DeleteUser(c *gin.Context) {
+	// ดึง role จาก JWT
 	roleVal, exists := c.Get("role")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "ไม่ได้รับอนุญาต"})
@@ -322,16 +370,23 @@ func DeleteUser(c *gin.Context) {
 		return
 	}
 
-	id := c.Param("id")
+	// ดึง gmail จาก param
+	gmailParam := c.Param("gmail")
+	if gmailParam == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "gmail ไม่ถูกต้อง"})
+		return
+	}
 
+	// ดึงข้อมูลผู้ใช้จาก DB ตาม Gmail
 	var user models.User
-	if err := config.DB.Preload("Role").First(&user, id).Error; err != nil {
-		log.Printf("DeleteUser: ไม่พบ user ID %v: %v", id, err)
+	if err := config.DB.Preload("Role").Where("gmail = ?", gmailParam).First(&user).Error; err != nil {
+		log.Printf("DeleteUser: ไม่พบ user Gmail %v: %v", gmailParam, err)
 		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		return
 	}
 
-	if currentRole == "admin" && user.Role.Name != "employee" {
+	// ตรวจสอบสิทธิ์
+	if currentRole == "admin" && user.RoleID != RoleEmployee {
 		c.JSON(http.StatusForbidden, gin.H{"error": "admin ลบได้เฉพาะ employee เท่านั้น"})
 		return
 	} else if currentRole != "admin" && currentRole != "superadmin" {
@@ -339,7 +394,8 @@ func DeleteUser(c *gin.Context) {
 		return
 	}
 
-	if err := config.DB.Delete(&models.User{}, id).Error; err != nil {
+	// ลบผู้ใช้
+	if err := config.DB.Delete(&user).Error; err != nil {
 		log.Printf("DeleteUser: delete user error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถลบผู้ใช้ได้"})
 		return

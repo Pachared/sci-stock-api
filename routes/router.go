@@ -78,8 +78,8 @@ func SetupRoutes(r *gin.Engine) {
 		{
 			// CRUD ผู้ใช้
 			usersGroup.GET("", controllers.GetUsers)          // GET /api/users // ดึงรายชื่อผู้ใช้ทั้งหมด
-			usersGroup.PUT("/:id", controllers.UpdateUser)    // PUT /api/users/:id // อัปเดตข้อมูลผู้ใช้ตาม id
-			usersGroup.DELETE("/:id", controllers.DeleteUser) // DELETE /api/users/:id // ลบผู้ใช้ตาม id
+			usersGroup.PUT("/:gmail", controllers.UpdateUser)    // PUT /api/users/:gmail // อัปเดตข้อมูลผู้ใช้ตาม gmail
+			usersGroup.DELETE("/gmail/:gmail", controllers.DeleteUser) // DELETE /api/users/gmail/:gmail // ลบผู้ใช้ตาม gmail
 
 			// จัดการผู้ใช้ที่ยังรออนุมัติ (สร้างคำขอและยืนยัน OTP)
 			usersGroup.POST("/requests", controllers.CreateUserRequestByAdmin)     // POST /api/users/requests // สร้างคำขอสร้างผู้ใช้ใหม่ (รอ OTP)

@@ -10,17 +10,17 @@ type User struct {
 	TwoFAEnabled bool      `gorm:"column:two_fa_enabled"`
 	FirstName    string    `gorm:"size:100" json:"first_name"`
 	LastName     string    `gorm:"size:100" json:"last_name"`
-	RoleID       uint      `json:"role_id"`
+	RoleID       uint32    `gorm:"not null" json:"role_id"`
 	ProfileImage []byte    `gorm:"type:longblob"`
 	CreatedAt    time.Time `gorm:"autoCreateTime" json:"created_at"`
-	Role         Role      `gorm:"foreignKey:RoleID" json:"role"`
+	Role         *Role     `gorm:"foreignKey:RoleID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"role"`
 }
 
 type UserProfileResponse struct {
 	Gmail        string `json:"gmail"`
 	FirstName    string `json:"firstName"`
 	LastName     string `json:"lastName"`
-	RoleID       uint   `json:"roleId"`
+	RoleID       uint32   `json:"roleId"`
 	RoleName     string `json:"roleName"`
 	ProfileImage string `json:"profileImage"`
 }
