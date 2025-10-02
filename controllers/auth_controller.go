@@ -3,13 +3,13 @@ package controllers
 import (
 	"encoding/base64"
 	"io"
+	"log"
 	"net/http"
 	"sci-stock-api/config"
 	"sci-stock-api/models"
 	"sci-stock-api/services"
 	"strings"
 	"time"
-	"log"
 
 	"github.com/gin-gonic/gin"
 )
@@ -30,7 +30,7 @@ func Login(c *gin.Context) {
 		log.Printf("Failed login attempt for gmail: %s from IP: %s", input.Gmail, c.ClientIP())
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "อีเมลหรือรหัสผ่านไม่ถูกต้อง"})
 		return
-	}	
+	}
 
 	if !services.CheckPasswordHash(input.Password, user.Password) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "อีเมลหรือรหัสผ่านไม่ถูกต้อง"})
@@ -57,31 +57,36 @@ func Login(c *gin.Context) {
 }
 
 func Profile(c *gin.Context) {
-    userID := c.MustGet("userID").(uint) // 👈 เปลี่ยนเป็น uint32
+	userID := c.MustGet("userID").(uint)
 
-    var user models.User
-    if err := config.DB.Preload("Role").First(&user, userID).Error; err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่พบข้อมูลผู้ใช้"})
-        return
-    }
+	var user models.User
+	if err := config.DB.Preload("Role").First(&user, userID).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่พบข้อมูลผู้ใช้"})
+		return
+	}
 
-    var profileImage string
-    if len(user.ProfileImage) > 0 {
-        profileImage = base64.StdEncoding.EncodeToString(user.ProfileImage)
-    } else {
-        profileImage = ""
-    }
+	var profileImage string
+	if len(user.ProfileImage) > 0 {
+		profileImage = base64.StdEncoding.EncodeToString(user.ProfileImage)
+	} else {
+		profileImage = ""
+	}
 
-    resp := models.UserProfileResponse{
-        Gmail:        user.Gmail,
-        FirstName:    user.FirstName,
-        LastName:     user.LastName,
-        RoleID:       uint32(user.RoleID),
-        RoleName:     user.Role.Name,
-        ProfileImage: profileImage,
-    }
+	var roleID uint32 = 0
+	if user.RoleID != nil {
+		roleID = uint32(*user.RoleID)
+	}
 
-    c.JSON(http.StatusOK, resp)
+	resp := models.UserProfileResponse{
+		Gmail:        user.Gmail,
+		FirstName:    user.FirstName,
+		LastName:     user.LastName,
+		RoleID:       roleID,
+		RoleName:     user.Role.Name,
+		ProfileImage: profileImage,
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
 
 func UpdateOwnProfile(c *gin.Context) {
@@ -296,12 +301,13 @@ func VerifyUser(c *gin.Context) {
 		return
 	}
 
+	roleID := uint(4)
 	user := models.User{
 		Gmail:        userVerif.Gmail,
 		Password:     userVerif.Password,
 		FirstName:    userVerif.FirstName,
 		LastName:     userVerif.LastName,
-		RoleID:       4,
+		RoleID:       &roleID,
 		ProfileImage: userVerif.Image,
 	}
 

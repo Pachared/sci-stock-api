@@ -169,7 +169,8 @@ func AdminChangeUserPassword(c *gin.Context) {
 		return
 	}
 
-	if currentUser.RoleID > 2 {
+	// เช็ค RoleID ของ currentUser ก่อน
+	if currentUser.RoleID == nil || *currentUser.RoleID > 2 {
 		c.JSON(http.StatusForbidden, gin.H{"error": "คุณไม่มีสิทธิ์เปลี่ยนรหัสผ่านให้ผู้อื่น"})
 		return
 	}
@@ -190,9 +191,12 @@ func AdminChangeUserPassword(c *gin.Context) {
 		return
 	}
 
-	if currentUser.RoleID == 2 && targetUser.RoleID <= 2 {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Admin ไม่สามารถเปลี่ยนรหัสผ่านของ Admin หรือ Superadmin ได้"})
-		return
+	// เช็ค RoleID ของ targetUser ก่อน
+	if currentUser.RoleID != nil && targetUser.RoleID != nil {
+		if *currentUser.RoleID == 2 && *targetUser.RoleID <= 2 {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Admin ไม่สามารถเปลี่ยนรหัสผ่านของ Admin หรือ Superadmin ได้"})
+			return
+		}
 	}
 
 	hashed, err := services.HashPassword(input.NewPassword)

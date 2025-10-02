@@ -46,13 +46,15 @@ func CreateUserRequestByAdmin(c *gin.Context) {
 	lastName := c.PostForm("last_name")
 	roleStr := c.PostForm("role_id")
 
-	roleID, err := strconv.Atoi(roleStr)
+	roleIDInt, err := strconv.Atoi(roleStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "role_id ไม่ถูกต้อง"})
 		return
 	}
+	roleID := uint(roleIDInt) // 🔹 แปลงเป็น uint
 
-	if creator.RoleID == RoleAdmin && (roleID == RoleAdmin || roleID == RoleSuperAdmin) {
+	// เช็คสิทธิ์ creator.RoleID (ต้อง dereference pointer)
+	if creator.RoleID != nil && *creator.RoleID == RoleAdmin && (roleID == RoleAdmin || roleID == RoleSuperAdmin) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "admin ไม่สามารถสร้าง admin หรือ superadmin ได้"})
 		return
 	}
@@ -95,10 +97,13 @@ func CreateUserRequestByAdmin(c *gin.Context) {
 	now := time.Now().In(time.FixedZone("Asia/Bangkok", 7*3600))
 	expire := now.Add(10 * time.Minute)
 
+	// 🔹 แปลง roleID เป็น pointer ก่อน insert
+	roleIDPtr := &roleID
+
 	err = config.DB.Exec(`
         INSERT INTO user_verifications (gmail, password, first_name, last_name, role_id, profile_image, otp, otp_expires_at, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, gmail, hashedPass, firstName, lastName, roleID, imageData, otp, expire, now).Error
+    `, gmail, hashedPass, firstName, lastName, roleIDPtr, imageData, otp, expire, now).Error
 	if err != nil {
 		log.Printf("CreateUserRequestByAdmin: insert user_verifications error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกได้"})
@@ -165,12 +170,13 @@ func VerifyAndActivateUser(c *gin.Context) {
 		}
 	}()
 
+	roleID := uint(verif.RoleID) // 🔹 แปลงเป็น uint
 	user := models.User{
 		Gmail:        verif.Gmail,
 		Password:     verif.Password,
 		FirstName:    verif.FirstName,
 		LastName:     verif.LastName,
-		RoleID:       uint32(verif.RoleID),
+		RoleID:       &roleID, // 🔹 assign pointer
 		ProfileImage: verif.Image,
 	}
 
@@ -230,12 +236,11 @@ func GetUsers(c *gin.Context) {
 
 	var filteredUsers []models.User
 	for _, user := range users {
-
 		switch currentRole {
 		case "superadmin":
 			filteredUsers = append(filteredUsers, user)
 		case "admin":
-			if user.RoleID == RoleEmployee {
+			if user.RoleID != nil && *user.RoleID == RoleEmployee {
 				filteredUsers = append(filteredUsers, user)
 			}
 		default:
@@ -250,11 +255,17 @@ func GetUsers(c *gin.Context) {
 		if len(user.ProfileImage) > 0 {
 			profileImage = base64.StdEncoding.EncodeToString(user.ProfileImage)
 		}
+
+		var roleID uint32 = 0
+		if user.RoleID != nil {
+			roleID = uint32(*user.RoleID)
+		}
+
 		responses = append(responses, models.UserProfileResponse{
 			Gmail:        user.Gmail,
 			FirstName:    user.FirstName,
 			LastName:     user.LastName,
-			RoleID:       user.RoleID,
+			RoleID:       roleID,
 			ProfileImage: profileImage,
 		})
 	}
@@ -287,7 +298,7 @@ func UpdateUser(c *gin.Context) {
 		return
 	}
 
-	if currentRole == "admin" && user.RoleID != RoleEmployee {
+	if currentRole == "admin" && (user.RoleID == nil || *user.RoleID != RoleEmployee) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "admin แก้ไขได้เฉพาะ employee เท่านั้น"})
 		return
 	} else if currentRole != "admin" && currentRole != "superadmin" {
@@ -336,7 +347,8 @@ func UpdateUser(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "role_id ไม่ถูกต้อง"})
 			return
 		}
-		user.RoleID = uint32(parsedRoleID)
+		uid := uint(parsedRoleID)
+		user.RoleID = &uid
 	}
 
 	if err := config.DB.Save(&user).Error; err != nil {
@@ -345,13 +357,18 @@ func UpdateUser(c *gin.Context) {
 		return
 	}
 
+	var roleID uint32 = 0
+	if user.RoleID != nil {
+		roleID = uint32(*user.RoleID)
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"message": "อัปเดตข้อมูลสำเร็จ",
 		"user": gin.H{
 			"gmail":      user.Gmail,
 			"first_name": user.FirstName,
 			"last_name":  user.LastName,
-			"role_id":    user.RoleID,
+			"role_id":    roleID,
 			"role_name":  user.Role.Name,
 		},
 	})
@@ -386,10 +403,12 @@ func DeleteUser(c *gin.Context) {
 	}
 
 	// ตรวจสอบสิทธิ์
-	if currentRole == "admin" && user.RoleID != RoleEmployee {
-		c.JSON(http.StatusForbidden, gin.H{"error": "admin ลบได้เฉพาะ employee เท่านั้น"})
-		return
-	} else if currentRole != "admin" && currentRole != "superadmin" {
+	if currentRole == "admin" {
+		if user.RoleID == nil || *user.RoleID != RoleEmployee {
+			c.JSON(http.StatusForbidden, gin.H{"error": "admin ลบได้เฉพาะ employee เท่านั้น"})
+			return
+		}
+	} else if currentRole != "superadmin" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "คุณไม่มีสิทธิ์ลบข้อมูลนี้"})
 		return
 	}
