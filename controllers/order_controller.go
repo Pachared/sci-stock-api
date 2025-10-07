@@ -88,7 +88,7 @@ func FindProductByBarcode(db *gorm.DB, barcode string) (*models.Product, string,
 func GetProductByBarcode(c *gin.Context) {
 	db := c.MustGet("DB").(*gorm.DB)
 	barcode := c.Param("barcode")
-	
+
 	if barcode == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Barcode ไม่ถูกต้อง"})
 		return
@@ -105,6 +105,7 @@ func GetProductByBarcode(c *gin.Context) {
 		ProductName: product.ProductName,
 		Barcode:     product.Barcode,
 		Price:       product.Price,
+		Cost:        product.Cost,
 		ImageURL:    product.ImageURL,
 		Category:    table,
 	}
@@ -259,7 +260,6 @@ func SellProductLocal(c *gin.Context) {
         return
     }
 
-    // ดึงสินค้าจากฐานข้อมูลเหมือนเดิม
     product, table, err := FindProductByBarcode(db, req.Barcode)
     if err != nil {
         c.JSON(http.StatusNotFound, models.ErrorResponse{Error: "ไม่พบสินค้า"})
@@ -281,9 +281,9 @@ func SellProductLocal(c *gin.Context) {
         }
 
         if err := tx.Exec(`
-            INSERT INTO sales_today (product_name, barcode, price, quantity, sold_at, image_url)
-            VALUES (?, ?, ?, ?, ?, ?)`,
-            product.ProductName, product.Barcode, product.Price, req.Quantity, time.Now(), product.ImageURL).Error; err != nil {
+            INSERT INTO sales_today (product_name, barcode, price, cost, quantity, sold_at, image_url)
+            VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            product.ProductName, product.Barcode, product.Price, product.Cost, req.Quantity, time.Now(), product.ImageURL).Error; err != nil {
             return err
         }
 
@@ -302,12 +302,13 @@ func SellProductLocal(c *gin.Context) {
         Price:       product.Price,
         ImageURL:    product.ImageURL,
         Category:    product.Category,
+        Cost:        product.Cost,
     }
 
     c.JSON(http.StatusOK, gin.H{
         "message":          "ตัดสต๊อกสำเร็จ (Local)",
         "product":          resp,
-        "stock_remaining": product.Stock - req.Quantity,
+        "stock_remaining":  product.Stock - req.Quantity,
     })
 }
 
@@ -375,17 +376,56 @@ func RefreshCache(c *gin.Context) {
 func GetSalesToday(c *gin.Context) {
     db := c.MustGet("DB").(*gorm.DB)
 
-    var sales []models.SaleToday
+    ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+    defer cancel()
 
-    if err := db.Table("sales_today").Find(&sales).Error; err != nil {
+    var sales []models.SaleToday
+    if err := db.WithContext(ctx).
+        Table("sales_today").
+        Select("id, product_name, barcode, price, cost, quantity, sold_at, image_url").
+        Find(&sales).Error; err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{
-            "error": "ไม่สามารถดึงข้อมูล sales_today ได้: " + err.Error(),
+            "error": "ไม่สามารถดึงข้อมูลยอดขายวันนี้ได้",
+            "detail": err.Error(),
         })
         return
     }
 
     c.JSON(http.StatusOK, gin.H{
         "sales_today": sales,
+        "count": len(sales),
+    })
+}
+
+func GetDailyExpenses(c *gin.Context) {
+    db := c.MustGet("DB").(*gorm.DB)
+
+    ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+    defer cancel()
+
+    var expenses []models.DailyExpense
+    if err := db.WithContext(ctx).
+        Table("daily_payments").
+        Select("id, item_name, amount, payment_date, created_at").
+        Order("payment_date DESC"). // เรียงจากใหม่ไปเก่า
+        Find(&expenses).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{
+            "error": "ไม่สามารถดึงข้อมูลรายจ่ายได้",
+            "detail": err.Error(),
+        })
+        return
+    }
+
+    // คำนวณยอดรวมทั้งหมด
+    var total float64
+    for _, e := range expenses {
+        total += e.Amount
+    }
+
+    c.JSON(http.StatusOK, gin.H{
+        "total": total,
+        "daily_expenses": expenses,
+        "count": len(expenses),
     })
 }
 

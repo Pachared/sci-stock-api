@@ -52,6 +52,7 @@ func SetupRoutes(r *gin.Engine) {
 		api.POST("/orders", controllers.SellProduct)                  // POST /api/orders // สร้างคำสั่งซื้อ (ขายสินค้า)
 		api.GET("/fromsheet", controllers.GetProductsFromSheet)       // GET /api/fromsheet // ดึงข้อมูลสินค้าจาก Google Sheets
 		api.GET("/sales_today", controllers.GetSalesToday)            // GET /api/sales_today // ดึงยอดขายวันนี้
+		api.GET("/expenses/today", controllers.GetDailyExpenses)      // GET /api/expenses/today // ดึงข้อมูลรายจ่ายวันนี้
 		api.POST("/sell-local", controllers.SellProductLocal)         // POST /api/sell-local // ขายสินค้าแบบออฟไลน์ (บันทึกคำสั่งซื้อจากเครื่องลูกข่าย)
 		api.GET("/product/:barcode", controllers.GetProductByBarcode) // GET /api/product/:barcode // ดึงข้อมูลสินค้าตามบาร์โค้ด
 		api.POST("/daily-payments", controllers.CreateDailyPayment)   // POST /api/daily-payments // บันทึกการชำระเงินรายวัน

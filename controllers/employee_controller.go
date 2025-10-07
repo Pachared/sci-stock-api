@@ -13,7 +13,8 @@ import (
 func HandleEmployeeRegister(c *gin.Context) {
 	firstName := c.PostForm("firstName")
 	lastName := c.PostForm("lastName")
-	employeeId := c.PostForm("employeeId")
+	gmail := c.PostForm("gmail")
+	studentId := c.PostForm("studentId")
 	contact := c.PostForm("contact")
 
 	var fileBytes []byte
@@ -37,9 +38,9 @@ func HandleEmployeeRegister(c *gin.Context) {
 
 	result := config.DB.Exec(`
 		INSERT INTO student_applications
-			(first_name, last_name, student_id, schedule, contact_info, status)
-		VALUES (?, ?, ?, ?, ?, 'รออนุมัติ')
-	`, firstName, lastName, employeeId, fileBytes, contact)
+			(first_name, last_name, gmail, student_id, schedule, contact_info, status)
+		VALUES (?, ?, ?, ?, ?, ?, 'รออนุมัติ')
+	`, firstName, lastName, gmail, studentId, fileBytes, contact)
 
 	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกลงฐานข้อมูลได้"})
@@ -47,10 +48,11 @@ func HandleEmployeeRegister(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":    "สมัครพนักงานสำเร็จ",
+		"message":    "สมัครนักศึกษาเป็นพนักงานสำเร็จ",
 		"firstName":  firstName,
 		"lastName":   lastName,
-		"employeeId": employeeId,
+		"gmail":      gmail,
+		"studentId":  studentId,
 		"contact":    contact,
 		"fileSize":   len(fileBytes),
 	})
@@ -75,6 +77,7 @@ func GetStudentApplications(c *gin.Context) {
             ID:        app.ID,
             FirstName: app.FirstName,
             LastName:  app.LastName,
+            Gmail:     app.Gmail,
             StudentID: app.StudentID,
             Schedule:  scheduleBase64,
             Contact:   app.Contact,

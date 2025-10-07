@@ -80,6 +80,7 @@ type Product struct {
 	ProductName string  `gorm:"column:product_name" json:"product_name"`
 	Barcode     string  `gorm:"column:barcode" json:"barcode"`
 	Price       float64 `gorm:"column:price" json:"price"`
+	Cost        float64 `gorm:"column:cost" json:"cost"`
 	Stock       int     `gorm:"column:stock" json:"stock"`
 	ImageURL    string  `gorm:"column:image_url" json:"image_url"`
 	Category    string  `gorm:"-"`
@@ -90,6 +91,7 @@ type ProductResponse struct {
 	ProductName string  `json:"product_name"`
 	Barcode     string  `json:"barcode"`
 	Price       float64 `json:"price"`
+	Cost        float64 `json:"cost"`
 	ImageURL    string  `json:"image_url"`
 	Category    string  `json:"category"`
 }

@@ -97,7 +97,7 @@ func UpdateOwnProfile(c *gin.Context) {
 
     firstName := c.PostForm("first_name")
     lastName := c.PostForm("last_name")
-    newPassword := c.PostForm("password") // เพิ่มฟิลด์รหัสผ่านใหม่
+    newPassword := c.PostForm("password")
 
     file, _, err := c.Request.FormFile("profile_image")
     var imageData []byte
