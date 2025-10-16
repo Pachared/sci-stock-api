@@ -65,6 +65,8 @@ func SetupRoutes(r *gin.Engine) {
 		api.GET("/employees/applications", controllers.GetStudentApplications)                           // GET /api/employees/applications // ดึงข้อมูลใบสมัครพนักงานทั้งหมด
 		api.PUT("/employees/applications/:id", controllers.ApproveStudentApplication)                    // PUT /api/employees/applications/:id // อนุมัติใบสมัครพนักงานตาม id
 		api.DELETE("/employees/applications/approved/:id", controllers.DeleteApprovedStudentApplication) // DELETE /api/employees/applications/approved/:id // ลบใบสมัครพนักงานที่อนุมัติแล้วตาม id
+		api.POST("/employees/check-or-add", controllers.CheckOrAddEmployee) 						  // POST /api/employees/check-or-add // ตรวจสอบหรือเพิ่มพนักงานใหม่จากข้อมูลใบสมัคร
+		api.DELETE("employees/:gmail", controllers.DeleteEmployeeByGmail) 					// DELETE /api/employees/:gmail // ลบพนักงานตาม gmail (จำกัดสิทธิ์เฉพาะ admin/superadmin)
 
 		// จัดการตารางการทำงาน
 		api.GET("/work-schedules", controllers.GetWorkSchedules)          // GET /api/work-schedules // ดึงตารางการทำงานทั้งหมด

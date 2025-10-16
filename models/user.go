@@ -10,7 +10,7 @@ type User struct {
 	TwoFAEnabled bool      `gorm:"column:two_fa_enabled"`
 	FirstName    string    `gorm:"size:100" json:"first_name"`
 	LastName     string    `gorm:"size:100" json:"last_name"`
-	RoleID       uint64      `gorm:"not null"`
+	RoleID       uint64    `gorm:"not null"`
 	ProfileImage []byte    `gorm:"type:longblob"`
 	CreatedAt    time.Time `gorm:"autoCreateTime" json:"created_at"`
 	Role         Role      `gorm:"foreignKey:RoleID"`

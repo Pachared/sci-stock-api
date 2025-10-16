@@ -22,99 +22,83 @@ const (
 )
 
 func CreateUserRequestByAdmin(c *gin.Context) {
-	if err := c.Request.ParseMultipartForm(10 << 20); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "ไม่สามารถอ่านข้อมูลได้"})
-		return
-	}
+    if err := c.Request.ParseMultipartForm(10 << 20); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "ไม่สามารถอ่านข้อมูลได้"})
+        return
+    }
 
-	currentID, exists := c.Get("userID")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
+    currentID, exists := c.Get("userID")
+    if !exists {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+        return
+    }
 
-	var creator models.User
-	if err := config.DB.First(&creator, currentID).Error; err != nil {
-		log.Printf("CreateUserRequestByAdmin: ไม่พบผู้ใช้ ID %v: %v", currentID, err)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "ไม่พบผู้ใช้"})
-		return
-	}
+    var creator models.User
+    if err := config.DB.First(&creator, currentID).Error; err != nil {
+        log.Printf("CreateUserRequestByAdmin: ไม่พบผู้ใช้ ID %v: %v", currentID, err)
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "ไม่พบผู้ใช้"})
+        return
+    }
 
-	gmail := c.PostForm("gmail")
-	password := c.PostForm("password")
-	firstName := c.PostForm("first_name")
-	lastName := c.PostForm("last_name")
-	roleStr := c.PostForm("role_id")
+    gmail := c.PostForm("gmail")
+    password := c.PostForm("password")
+    firstName := c.PostForm("first_name")
+    lastName := c.PostForm("last_name")
+    roleStr := c.PostForm("role_id")
 
-	roleIDInt, err := strconv.Atoi(roleStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "role_id ไม่ถูกต้อง"})
-		return
-	}
-	roleID := uint(roleIDInt) // 🔹 ใช้ uint ธรรมดา
+    roleIDInt, err := strconv.Atoi(roleStr)
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "role_id ไม่ถูกต้อง"})
+        return
+    }
+    roleID := uint(roleIDInt)
 
-	// 🔹 เช็คสิทธิ์ตรง ๆ ไม่ต้อง dereference
-	if creator.RoleID == RoleAdmin && (roleID == RoleAdmin || roleID == RoleSuperAdmin) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "admin ไม่สามารถสร้าง admin หรือ superadmin ได้"})
-		return
-	}
+    if creator.RoleID == RoleAdmin && (roleID == RoleAdmin || roleID == RoleSuperAdmin) {
+        c.JSON(http.StatusForbidden, gin.H{"error": "admin ไม่สามารถสร้าง admin หรือ superadmin ได้"})
+        return
+    }
 
-	var count int64
-	config.DB.Model(&models.User{}).Where("gmail = ?", gmail).Count(&count)
-	if count > 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "อีเมลนี้ถูกใช้งานแล้ว"})
-		return
-	}
+    var count int64
+    config.DB.Model(&models.User{}).Where("gmail = ?", gmail).Count(&count)
+    if count > 0 {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "อีเมลนี้ถูกใช้งานแล้ว"})
+        return
+    }
 
-	config.DB.Table("user_verifications").Where("gmail = ?", gmail).Count(&count)
-	if count > 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "อีเมลนี้กำลังรอยืนยัน OTP อยู่"})
-		return
-	}
+    file, _, err := c.Request.FormFile("profile_image")
+    var imageData []byte
+    if err != nil && err != http.ErrMissingFile {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "อ่านไฟล์รูปภาพไม่สำเร็จ"})
+        return
+    }
+    if file != nil {
+        defer file.Close()
+        imageData, err = io.ReadAll(file)
+        if err != nil {
+            c.JSON(http.StatusBadRequest, gin.H{"error": "อ่านไฟล์รูปภาพไม่สำเร็จ"})
+            return
+        }
+    }
 
-	file, _, err := c.Request.FormFile("profile_image")
-	var imageData []byte
-	if err != nil && err != http.ErrMissingFile {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "อ่านไฟล์รูปภาพไม่สำเร็จ"})
-		return
-	}
-	if file != nil {
-		defer file.Close()
-		imageData, err = io.ReadAll(file)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "อ่านไฟล์รูปภาพไม่สำเร็จ"})
-			return
-		}
-	}
+    hashedPass, err := services.HashPassword(password)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในการเข้ารหัสรหัสผ่าน"})
+        return
+    }
 
-	hashedPass, err := services.HashPassword(password)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "เกิดข้อผิดพลาดในการเข้ารหัสรหัสผ่าน"})
-		return
-	}
+    now := time.Now().In(time.FixedZone("Asia/Bangkok", 7*3600))
 
-	otp := services.GenerateOTP(6)
-	now := time.Now().In(time.FixedZone("Asia/Bangkok", 7*3600))
-	expire := now.Add(10 * time.Minute)
+    err = config.DB.Exec(`
+        INSERT INTO users (gmail, password, first_name, last_name, role_id, profile_image, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, gmail, hashedPass, firstName, lastName, roleID, imageData, now).Error
+    if err != nil {
+        log.Printf("CreateUserRequestByAdmin: insert users error: %v", err)
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกได้"})
+        return
+    }
 
-	// 🔹 ส่ง roleID ตรง ๆ (ไม่ต้อง pointer)
-	err = config.DB.Exec(`
-        INSERT INTO user_verifications (gmail, password, first_name, last_name, role_id, profile_image, otp, otp_expires_at, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, gmail, hashedPass, firstName, lastName, roleID, imageData, otp, expire, now).Error
-	if err != nil {
-		log.Printf("CreateUserRequestByAdmin: insert user_verifications error: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกได้"})
-		return
-	}
-
-	html, plain := services.GenerateEmailBodyForOTP(otp)
-	if err := services.GoogleSendMail(gmail, "ยืนยัน OTP สำหรับการสร้างบัญชี", html, plain); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "ส่งอีเมล OTP ไม่สำเร็จ"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "ส่ง OTP สำเร็จ กรุณายืนยันอีเมล"})
+    c.JSON(http.StatusOK, gin.H{"message": "เพิ่มผู้ใช้เรียบร้อย"})
 }
 
 func VerifyAndActivateUser(c *gin.Context) {
