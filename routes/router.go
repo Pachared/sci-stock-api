@@ -47,6 +47,7 @@ func SetupRoutes(r *gin.Engine) {
 		api.GET("/dashboard/total", controllers.GetTotalProducts)             // GET /api/dashboard/total // ดึงข้อมูลสรุปจำนวนสินค้าทั้งหมด
 		api.GET("/dashboard/low-stock", controllers.GetLowStockProducts)      // GET /api/dashboard/low-stock // ดึงข้อมูลสินค้าที่ใกล้หมดสต๊อก
 		api.GET("/dashboard/out-of-stock", controllers.GetOutOfStockProducts) // GET /api/dashboard/out-of-stock // ดึงข้อมูลสินค้าที่หมดสต๊อก
+		api.GET("/dashboard/sales-summary", controllers.GetMonthlySalesSummary) // GET /api/dashboard/sales-summary // ดึงข้อมูลสรุปยอดขายรายเดือน
 
 		// จัดการคำสั่งซื้อ
 		api.POST("/orders", controllers.SellProduct)                  // POST /api/orders // สร้างคำสั่งซื้อ (ขายสินค้า)

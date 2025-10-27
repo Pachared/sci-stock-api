@@ -110,7 +110,7 @@ type ProductInput struct {
 	ImageURL     string  `json:"image_url"`
 }
 
-type ProductLow struct {
+type ProductDashboard struct {
 	ID           uint  `json:"id"`
 	ProductName  string `json:"product_name"`
 	Barcode      string `json:"barcode"`
