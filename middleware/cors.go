@@ -9,7 +9,7 @@ func CORSMiddleware() gin.HandlerFunc {
 		origin := c.Request.Header.Get("Origin")
 
 		allowedOrigins := map[string]bool{
-			"https://sci-stock-app.vercel.app/": true,
+			"https://sci-stock-app.vercel.app": true,
 			"https://from-empolyee-sci.vercel.app": true,
 			"http://localhost:5173": true,
 		}
