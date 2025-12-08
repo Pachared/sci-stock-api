@@ -16,9 +16,9 @@ var dashboardProductTables = []string{
 }
 
 var tableNameMap = map[string]string{
-	"dried_food":  "ประเภทแห้ง",
-	"soft_drink":  "ประเภทเครื่องดื่ม",
-	"stationery":  "ประเภทเครื่องเขียน",
+	"dried_food": "ประเภทแห้ง",
+	"soft_drink": "ประเภทเครื่องดื่ม",
+	"stationery": "ประเภทเครื่องเขียน",
 }
 
 func GetTotalProducts(c *gin.Context) {
@@ -30,7 +30,7 @@ func GetTotalProducts(c *gin.Context) {
 		if err := config.DB.Table(table).Select("SUM(stock)").Scan(&sum).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"ข้อความผิดพลาด": "ไม่สามารถดึงข้อมูลได้จากตาราง " + table,
-				"error":         err.Error(),
+				"error": err.Error(),
 			})
 			return
 		}
@@ -47,7 +47,7 @@ func GetTotalProducts(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"จำนวนสินค้าตามประเภท": result,
-		"จำนวนสินค้าทั้งหมด":  grandTotal,
+		"จำนวนสินค้าทั้งหมด":   grandTotal,
 	})
 }
 
@@ -63,7 +63,7 @@ func GetLowStockProducts(c *gin.Context) {
 			Find(&products).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"ข้อความผิดพลาด": "ไม่สามารถดึงข้อมูลได้จากตาราง " + table,
-				"error":         err.Error(),
+				"error": err.Error(),
 			})
 			return
 		}
@@ -84,7 +84,7 @@ func GetLowStockProducts(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"สินค้าใกล้หมดสต๊อก": lowStock,
-		"จำนวนรวมทั้งหมด":   totalLowCount,
+		"จำนวนรวมทั้งหมด":    totalLowCount,
 	})
 }
 
@@ -100,7 +100,7 @@ func GetOutOfStockProducts(c *gin.Context) {
 			Find(&products).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"ข้อความผิดพลาด": "ไม่สามารถดึงข้อมูลได้จากตาราง " + table,
-				"error":         err.Error(),
+				"error": err.Error(),
 			})
 			return
 		}
@@ -119,7 +119,7 @@ func GetOutOfStockProducts(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"สินค้าหมดสต๊อก":   outStock,
+		"สินค้าหมดสต๊อก":  outStock,
 		"จำนวนรวมทั้งหมด": totalOutCount,
 	})
 }
@@ -134,33 +134,39 @@ func GetMonthlySalesSummary(c *gin.Context) {
 	var summaries []SalesSummary
 
 	query := `
-		SELECT 
-			YEAR(sold_at) AS year,
-			CASE MONTH(sold_at)
-				WHEN 1 THEN 'ม.ค.'
-				WHEN 2 THEN 'ก.พ.'
-				WHEN 3 THEN 'มี.ค.'
-				WHEN 4 THEN 'เม.ย.'
-				WHEN 5 THEN 'พ.ค.'
-				WHEN 6 THEN 'มิ.ย.'
-				WHEN 7 THEN 'ก.ค.'
-				WHEN 8 THEN 'ส.ค.'
-				WHEN 9 THEN 'ก.ย.'
-				WHEN 10 THEN 'ต.ค.'
-				WHEN 11 THEN 'พ.ย.'
-				WHEN 12 THEN 'ธ.ค.'
-			END AS month,
-			SUM(price * quantity) AS total_sales
-		FROM sales_today
-		GROUP BY YEAR(sold_at), MONTH(sold_at)
-		ORDER BY YEAR(sold_at), MONTH(sold_at)
-	`
+    SELECT 
+        year,
+        CASE month
+            WHEN 1 THEN 'ม.ค.'
+            WHEN 2 THEN 'ก.พ.'
+            WHEN 3 THEN 'มี.ค.'
+            WHEN 4 THEN 'เม.ย.'
+            WHEN 5 THEN 'พ.ค.'
+            WHEN 6 THEN 'มิ.ย.'
+            WHEN 7 THEN 'ก.ค.'
+            WHEN 8 THEN 'ส.ค.'
+            WHEN 9 THEN 'ก.ย.'
+            WHEN 10 THEN 'ต.ค.'
+            WHEN 11 THEN 'พ.ย.'
+            WHEN 12 THEN 'ธ.ค.'
+        END AS month,
+        total_sales
+    FROM (
+        SELECT 
+            YEAR(sold_at) AS year,
+            MONTH(sold_at) AS month,
+            SUM(price * quantity) AS total_sales
+        FROM sales_today
+        GROUP BY YEAR(sold_at), MONTH(sold_at)
+    ) AS t
+    ORDER BY year, month
+`
 
 	rows, err := config.DB.Raw(query).Rows()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"ข้อความผิดพลาด": "ไม่สามารถดึงข้อมูลยอดขายรายเดือนทั้งหมดได้",
-			"error":         err.Error(),
+			"error": err.Error(),
 		})
 		return
 	}
@@ -180,6 +186,6 @@ func GetMonthlySalesSummary(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"ยอดขายรายเดือนทั้งหมด": summaries,
-		"ยอดขายรวมทั้งหมด":     totalAll,
+		"ยอดขายรวมทั้งหมด":      totalAll,
 	})
 }
