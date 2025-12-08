@@ -6,8 +6,6 @@ type User struct {
 	ID           uint      `gorm:"primaryKey" json:"id"`
 	Gmail        string    `gorm:"size:100;unique;not null" json:"gmail"`
 	Password     string    `gorm:"size:255;not null" json:"-"`
-	TwoFASecret  string    `gorm:"column:two_fa_secret"`
-	TwoFAEnabled bool      `gorm:"column:two_fa_enabled"`
 	FirstName    string    `gorm:"size:100" json:"first_name"`
 	LastName     string    `gorm:"size:100" json:"last_name"`
 	RoleID       uint64    `gorm:"not null"`
