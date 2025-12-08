@@ -38,8 +38,6 @@ func Connect() {
 	db.AutoMigrate(
 		&models.Role{},
 		&models.User{},
-		&models.Order{},
-		&models.OrderItem{},
 		&models.DriedFood{},
 		&models.FreshFood{},
 		&models.Snack{},
