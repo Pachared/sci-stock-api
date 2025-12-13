@@ -13,12 +13,16 @@ var dashboardProductTables = []string{
 	"dried_food",
 	"soft_drink",
 	"stationery",
+	"fresh_food",
+	"snack",
 }
 
 var tableNameMap = map[string]string{
 	"dried_food": "ประเภทแห้ง",
 	"soft_drink": "ประเภทเครื่องดื่ม",
 	"stationery": "ประเภทเครื่องเขียน",
+	"fresh_food": "ประเภทแช่แข็ง",
+	"snack": "ประเภทขนม",
 }
 
 func GetTotalProducts(c *gin.Context) {
