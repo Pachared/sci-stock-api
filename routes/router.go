@@ -48,6 +48,8 @@ func SetupRoutes(r *gin.Engine) {
 		api.GET("/dashboard/low-stock", controllers.GetLowStockProducts)      // GET /api/dashboard/low-stock // ดึงข้อมูลสินค้าที่ใกล้หมดสต๊อก
 		api.GET("/dashboard/out-of-stock", controllers.GetOutOfStockProducts) // GET /api/dashboard/out-of-stock // ดึงข้อมูลสินค้าที่หมดสต๊อก
 		api.GET("/dashboard/sales-summary", controllers.GetMonthlySalesSummary) // GET /api/dashboard/sales-summary // ดึงข้อมูลสรุปยอดขายรายเดือน
+		api.GET("/dashboard/sales-weekly", controllers.GetWeeklySalesCurrentMonth) // GET /api/dashboard/sales-weekly // ดึงข้อมูลสรุปยอดขายรายสัปดาห์
+		api.GET("/dashboard/top-selling-products", controllers.GetTopSellingProductsCurrentMonth,) // GET /api/dashboard/top-selling-products // ดึงข้อมูลสินค้าขายดี 3 อันดับแรกของเดือน
 
 		// จัดการคำสั่งซื้อ
 		api.POST("/orders", controllers.SellProduct)                  // POST /api/orders // สร้างคำสั่งซื้อ (ขายสินค้า)

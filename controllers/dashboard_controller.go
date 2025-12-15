@@ -22,7 +22,7 @@ var tableNameMap = map[string]string{
 	"soft_drink": "ประเภทเครื่องดื่ม",
 	"stationery": "ประเภทเครื่องเขียน",
 	"fresh_food": "ประเภทแช่แข็ง",
-	"snack": "ประเภทขนม",
+	"snack":      "ประเภทขนม",
 }
 
 func GetTotalProducts(c *gin.Context) {
@@ -191,5 +191,98 @@ func GetMonthlySalesSummary(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"ยอดขายรายเดือนทั้งหมด": summaries,
 		"ยอดขายรวมทั้งหมด":      totalAll,
+	})
+}
+
+func GetWeeklySalesCurrentMonth(c *gin.Context) {
+	type SalesSummary struct {
+		Week       int     `json:"week"`
+		WeekLabel  string  `json:"week_label"`
+		TotalSales float64 `json:"total_sales"`
+	}
+
+	var summaries []SalesSummary
+
+	query := `
+	SELECT
+		week_in_month AS week,
+		CONCAT('สัปดาห์ที่ ', week_in_month) AS week_label,
+		SUM(price * quantity) AS total_sales
+	FROM (
+		SELECT
+			price,
+			quantity,
+			FLOOR((DAY(sold_at) - 1) / 7) + 1 AS week_in_month
+		FROM sales_today
+		WHERE
+			MONTH(sold_at) = MONTH(CURRENT_DATE())
+			AND YEAR(sold_at) = YEAR(CURRENT_DATE())
+	) t
+	GROUP BY week_in_month
+	ORDER BY week_in_month
+	`
+
+	rows, err := config.DB.Raw(query).Rows()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"ข้อความผิดพลาด": "ไม่สามารถดึงยอดขายรายสัปดาห์ของเดือนปัจจุบันได้",
+			"error": err.Error(),
+		})
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var s SalesSummary
+		if err := rows.Scan(&s.Week, &s.WeekLabel, &s.TotalSales); err == nil {
+			summaries = append(summaries, s)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"ยอดขายรายสัปดาห์เดือนปัจจุบัน": summaries,
+	})
+}
+
+func GetTopSellingProductsCurrentMonth(c *gin.Context) {
+	type TopProduct struct {
+		ProductName string `json:"product_name"`
+		ImageURL    string `json:"image_url"`
+	}
+
+	var products []TopProduct
+
+	query := `
+	SELECT
+		product_name,
+		image_url
+	FROM sales_today
+	WHERE
+		MONTH(sold_at) = MONTH(CURRENT_DATE())
+		AND YEAR(sold_at) = YEAR(CURRENT_DATE())
+	GROUP BY product_name, image_url
+	ORDER BY SUM(quantity) DESC
+	LIMIT 3
+	`
+
+	rows, err := config.DB.Raw(query).Rows()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"ข้อความผิดพลาด": "ไม่สามารถดึงข้อมูลสินค้าขายดีของเดือนปัจจุบันได้",
+			"error": err.Error(),
+		})
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var p TopProduct
+		if err := rows.Scan(&p.ProductName, &p.ImageURL); err == nil {
+			products = append(products, p)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"สินค้าขายดีเดือนปัจจุบัน": products,
 	})
 }
