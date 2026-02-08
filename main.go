@@ -15,12 +15,6 @@ func main() {
 		log.Println("No .env file found, reading environment variables from system")
 	}
 
-	gmailConfig, err := config.NewGmailOAuthConfig()
-	if err != nil {
-		log.Fatal(err)
-	}
-	config.GmailOAuthConfig = gmailConfig
-
 	config.Connect()
 	db := config.DB
 
@@ -38,5 +32,6 @@ func main() {
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
 	routes.SetupRoutes(router)
+	routes.BackupRoutes(router , db)
 	router.Run(":8080")
 }
