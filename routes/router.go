@@ -17,14 +17,11 @@ func SetupRoutes(r *gin.Engine) {
 	// กลุ่ม route สำหรับระบบ Authentication เช่น ลงทะเบียน, เข้าสู่ระบบ
 	auth := r.Group("/auth")
 	{
-		auth.POST("/register", controllers.Register)                                                                // POST /auth/register // ลงทะเบียนผู้ใช้ใหม่ (ยังไม่สร้างบัญชีจริง รอ OTP)
 		auth.POST("/login", controllers.Login)                                                                      // POST /auth/login // เข้าสู่ระบบ รับ token
 		auth.GET("/profile", middleware.JWTAuthMiddleware(), controllers.Profile)                                   // GET /auth/profile // ดูข้อมูลโปรไฟล์ผู้ใช้ (ต้อง login)
 		auth.PUT("/profile", middleware.JWTAuthMiddleware(), controllers.UpdateOwnProfile)                          // PUT /auth/profile // อัปเดตข้อมูลโปรไฟล์ผู้ใช้ (ต้อง login)
 		auth.POST("/refresh", middleware.JWTAuthMiddleware(), controllers.RefreshToken)                             // POST /auth/refresh // รีเฟรช access token (ต้อง login)
 		auth.POST("/forgot-password", controllers.ForgotPassword)                                                   // POST /auth/forgot-password // ขอรีเซ็ตรหัสผ่าน
-		auth.POST("/reset-password", controllers.ResetPassword)                                                     // POST /auth/reset-password // รีเซ็ตรหัสผ่าน
-		auth.POST("/verify-email", controllers.VerifyUser)                                                          // POST /auth/verify-email // ยืนยันอีเมลผู้ใช้
 		auth.PUT("/change-password", middleware.JWTAuthMiddleware(), controllers.ChangeOwnPassword)                 // PUT /auth/change-password // เปลี่ยนรหัสผ่านตัวเอง (ต้อง login)
 		auth.PUT("/users/:id/change-password", middleware.JWTAuthMiddleware(), controllers.AdminChangeUserPassword) // PUT /auth/users/:id/change-password // admin เปลี่ยนรหัสผ่านผู้ใช้อื่น (ต้อง login)
 	}
@@ -76,6 +73,11 @@ func SetupRoutes(r *gin.Engine) {
 		api.POST("/work-schedules", controllers.CreateWorkSchedule)       // POST /api/work-schedules // สร้างตารางการทำงานใหม่
 		api.PUT("/work-schedules/:id", controllers.UpdateWorkSchedule)    // PUT /api/work-schedules/:id // อัปเดตตารางการทำงานตาม id
 		api.DELETE("/work-schedules/:id", controllers.DeleteWorkSchedule) // DELETE /api/work-schedules/:id // ลบตารางการทำงานตาม id
+		
+		// เช็คอินพนักงาน
+		api.POST("/checkin", controllers.EmployeeCheckin) // POST /api/checkin // เช็คอินพนักงาน
+		api.POST("/checkout", controllers.EmployeeCheckout) // POST /api/checkout // เช็คเอาท์พนักงาน
+		api.GET("/checkin/status", controllers.CheckinStatus) // GET /api/checkin/status // เช็ค status การเช็คอินว่าเช็คหรือยัง
 
 		// จัดการผู้ใช้
 		usersGroup := api.Group("/users")              // กลุ่มจัดการผู้ใช้ (จำกัดสิทธิ์ admin หรือ superadmin เท่านั้น)
