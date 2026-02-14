@@ -78,6 +78,7 @@ func SetupRoutes(r *gin.Engine) {
 		api.POST("/checkin", controllers.EmployeeCheckin) // POST /api/checkin // เช็คอินพนักงาน
 		api.POST("/checkout", controllers.EmployeeCheckout) // POST /api/checkout // เช็คเอาท์พนักงาน
 		api.GET("/checkin/status", controllers.CheckinStatus) // GET /api/checkin/status // เช็ค status การเช็คอินว่าเช็คหรือยัง
+		api.GET("/attendance/checkins", controllers.GetCheckinsWithFirstName) // GET /api/attendance/checkins // ดึงข้อมูลเช็คอินพนักงาน
 
 		// จัดการผู้ใช้
 		usersGroup := api.Group("/users")              // กลุ่มจัดการผู้ใช้ (จำกัดสิทธิ์ admin หรือ superadmin เท่านั้น)
