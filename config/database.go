@@ -42,5 +42,11 @@ func Connect() {
 		&models.Snack{},
 		&models.SoftDrink{},
 		&models.Stationery{},
+		&models.Checkin{},
+		&models.StudentApplication{},
+		&models.SaleToday{},
+		&models.DailyPayment{},
+		&models.WorkSchedule{},
+		&models.RefreshToken{},
 	)
 }
