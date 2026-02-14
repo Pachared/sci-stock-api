@@ -15,9 +15,8 @@ import (
 var DB *gorm.DB
 
 func Connect() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
+	if err := godotenv.Load(); err != nil {
+		log.Println("ไม่พบไฟล์ .env กำลังใช้ค่าจาก environment ของระบบแทน")
 	}
 
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
@@ -30,7 +29,7 @@ func Connect() {
 
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
-		log.Fatal("Failed to connect to database:", err)
+		log.Fatal("เชื่อมต่อฐานข้อมูลไม่สำเร็จ:", err)
 	}
 
 	DB = db
