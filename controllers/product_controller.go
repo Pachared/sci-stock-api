@@ -1,14 +1,30 @@
 package controllers
 
 import (
+	"fmt"
 	"net/http"
+	"time"
 
+	"encoding/json"
 	"github.com/gin-gonic/gin"
+	"io"
 	"sci-stock-api/config"
 	"sci-stock-api/models"
-	"io"
-	"encoding/json"
 )
+
+const productsCacheTTL = 10 * time.Minute
+
+func productsCacheKey(category string) string {
+	return fmt.Sprintf("products:category:%s", category)
+}
+
+func invalidateProductsCache(category string) {
+	if config.RDB == nil {
+		return
+	}
+
+	_ = config.RDB.Del(config.Ctx, productsCacheKey(category)).Err()
+}
 
 var productTables = map[string]interface{}{
 	"dried_food": &[]models.DriedFood{},
@@ -77,6 +93,13 @@ func createProduct(category string, input models.ProductInput) error {
 func GetProductsByCategory(c *gin.Context) {
 	category := c.Param("category")
 
+	if config.RDB != nil {
+		if cached, err := config.RDB.Get(config.Ctx, productsCacheKey(category)).Bytes(); err == nil && len(cached) > 0 {
+			c.Data(http.StatusOK, "application/json; charset=utf-8", cached)
+			return
+		}
+	}
+
 	var result interface{}
 
 	switch category {
@@ -98,6 +121,13 @@ func GetProductsByCategory(c *gin.Context) {
 	if err := config.DB.Find(result).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot fetch products"})
 		return
+	}
+
+	if  config.RDB != nil {
+		if data, err := json.Marshal(result); err == nil {
+			_ = config.RDB.Set(config.Ctx, productsCacheKey(category), data, productsCacheTTL).Err()
+		}
+		
 	}
 
 	c.JSON(http.StatusOK, result)
@@ -134,6 +164,7 @@ func CreateProductByCategory(c *gin.Context) {
 		}
 	}
 
+	invalidateProductsCache(category)
 	c.JSON(http.StatusCreated, gin.H{"message": "product(s) created"})
 }
 
@@ -159,6 +190,7 @@ func CreateProductsBulkByCategory(c *gin.Context) {
 		}
 	}
 
+	invalidateProductsCache(category)
 	c.JSON(http.StatusCreated, gin.H{"message": "bulk products created"})
 }
 
@@ -244,6 +276,7 @@ func UpdateProductByCategory(c *gin.Context) {
 		return
 	}
 
+	invalidateProductsCache(category)
 	c.JSON(http.StatusOK, gin.H{"message": "product updated"})
 }
 
@@ -274,5 +307,6 @@ func DeleteProductByCategory(c *gin.Context) {
 		return
 	}
 
+	invalidateProductsCache(category)
 	c.JSON(http.StatusOK, gin.H{"message": "product deleted"})
 }
