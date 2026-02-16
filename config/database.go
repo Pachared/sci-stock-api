@@ -14,7 +14,7 @@ import (
 
 var DB *gorm.DB
 
-func Connect() {
+func ConnectDatabase() {
 	if err := godotenv.Load(); err != nil {
 		log.Println("ไม่พบไฟล์ .env กำลังใช้ค่าจาก environment ของระบบแทน")
 	}
