@@ -3,8 +3,8 @@ package main
 import (
 	"log"
 
-	"github.com/joho/godotenv"
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 	"sci-stock-api/config"
 	"sci-stock-api/models"
 	"sci-stock-api/routes"
@@ -15,8 +15,15 @@ func main() {
 		log.Println("No .env file found, reading environment variables from system")
 	}
 
-	config.Connect()
+	config.ConnectDatabase()
 	db := config.DB
+
+	config.ConnectRedis()
+	if config.RDB == nil {
+		log.Println("❌ Redis = NIL (ไม่ได้เชื่อม)")
+	} else {
+		log.Println("✅ Redis = CONNECTED")
+	}
 
 	if err := db.AutoMigrate(&models.Role{}, &models.User{}); err != nil {
 		log.Fatal("Migration failed: ", err)
@@ -32,6 +39,6 @@ func main() {
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
 	routes.SetupRoutes(router)
-	routes.BackupRoutes(router , db)
+	routes.BackupRoutes(router, db)
 	router.Run(":8080")
 }
