@@ -1,13 +1,14 @@
 package controllers
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
-	"encoding/json"
 	"github.com/gin-gonic/gin"
-	"io"
+	"gorm.io/gorm"
 	"sci-stock-api/config"
 	"sci-stock-api/models"
 )
@@ -18,12 +19,17 @@ func productsCacheKey(category string) string {
 	return fmt.Sprintf("products:category:%s", category)
 }
 
-func invalidateProductsCache(category string) {
+func invalidateAllProductsCache() {
 	if config.RDB == nil {
 		return
 	}
 
-	_ = config.RDB.Del(config.Ctx, productsCacheKey(category)).Err()
+	keys, err := config.RDB.Keys(config.Ctx, "products:category:*").Result()
+	if err != nil || len(keys) == 0 {
+		return
+	}
+
+	_ = config.RDB.Del(config.Ctx, keys...).Err()
 }
 
 var productTables = map[string]interface{}{
@@ -34,60 +40,110 @@ var productTables = map[string]interface{}{
 	"stationery": &[]models.Stationery{},
 }
 
-func createProduct(category string, input models.ProductInput) error {
+func getProductSliceByCategory(category string) (interface{}, error) {
 	switch category {
 	case "dried_food":
-		return config.DB.Create(&models.DriedFood{
-			ProductName:  input.ProductName,
-			Barcode:      input.Barcode,
-			Price:        input.Price,
-			Cost:         input.Cost,
-			Stock:        input.Stock,
-			ReorderLevel: input.ReorderLevel,
-			ImageURL:     input.ImageURL,
-		}).Error
+		return &[]models.DriedFood{}, nil
 	case "fresh_food":
-		return config.DB.Create(&models.FreshFood{
-			ProductName:  input.ProductName,
-			Barcode:      input.Barcode,
-			Price:        input.Price,
-			Cost:         input.Cost,
-			Stock:        input.Stock,
-			ReorderLevel: input.ReorderLevel,
-			ImageURL:     input.ImageURL,
-		}).Error
+		return &[]models.FreshFood{}, nil
 	case "snack":
-		return config.DB.Create(&models.Snack{
-			ProductName:  input.ProductName,
-			Barcode:      input.Barcode,
-			Price:        input.Price,
-			Cost:         input.Cost,
-			Stock:        input.Stock,
-			ReorderLevel: input.ReorderLevel,
-			ImageURL:     input.ImageURL,
-		}).Error
+		return &[]models.Snack{}, nil
 	case "soft_drink":
-		return config.DB.Create(&models.SoftDrink{
-			ProductName:  input.ProductName,
-			Barcode:      input.Barcode,
-			Price:        input.Price,
-			Cost:         input.Cost,
-			Stock:        input.Stock,
-			ReorderLevel: input.ReorderLevel,
-			ImageURL:     input.ImageURL,
-		}).Error
+		return &[]models.SoftDrink{}, nil
 	case "stationery":
-		return config.DB.Create(&models.Stationery{
-			ProductName:  input.ProductName,
-			Barcode:      input.Barcode,
-			Price:        input.Price,
-			Cost:         input.Cost,
-			Stock:        input.Stock,
-			ReorderLevel: input.ReorderLevel,
-			ImageURL:     input.ImageURL,
-		}).Error
+		return &[]models.Stationery{}, nil
+	default:
+		return nil, fmt.Errorf("invalid category")
 	}
+}
+
+func getProductModelByCategory(category string) (interface{}, error) {
+	switch category {
+	case "dried_food":
+		return &models.DriedFood{}, nil
+	case "fresh_food":
+		return &models.FreshFood{}, nil
+	case "snack":
+		return &models.Snack{}, nil
+	case "soft_drink":
+		return &models.SoftDrink{}, nil
+	case "stationery":
+		return &models.Stationery{}, nil
+	default:
+		return nil, fmt.Errorf("invalid category")
+	}
+}
+
+func applyProductInput(product interface{}, input models.ProductInput) error {
+	switch p := product.(type) {
+	case *models.DriedFood:
+		p.ProductName = input.ProductName
+		p.Price = input.Price
+		p.Cost = input.Cost
+		p.Stock = input.Stock
+		p.ReorderLevel = input.ReorderLevel
+		p.ImageURL = input.ImageURL
+	case *models.FreshFood:
+		p.ProductName = input.ProductName
+		p.Price = input.Price
+		p.Cost = input.Cost
+		p.Stock = input.Stock
+		p.ReorderLevel = input.ReorderLevel
+		p.ImageURL = input.ImageURL
+	case *models.Snack:
+		p.ProductName = input.ProductName
+		p.Price = input.Price
+		p.Cost = input.Cost
+		p.Stock = input.Stock
+		p.ReorderLevel = input.ReorderLevel
+		p.ImageURL = input.ImageURL
+	case *models.SoftDrink:
+		p.ProductName = input.ProductName
+		p.Price = input.Price
+		p.Cost = input.Cost
+		p.Stock = input.Stock
+		p.ReorderLevel = input.ReorderLevel
+		p.ImageURL = input.ImageURL
+	case *models.Stationery:
+		p.ProductName = input.ProductName
+		p.Price = input.Price
+		p.Cost = input.Cost
+		p.Stock = input.Stock
+		p.ReorderLevel = input.ReorderLevel
+		p.ImageURL = input.ImageURL
+	default:
+		return fmt.Errorf("unsupported product model")
+	}
+
 	return nil
+}
+
+func createProduct(category string, input models.ProductInput) error {
+	model, err := getProductModelByCategory(category)
+	if err != nil {
+		return err
+	}
+
+	if err := applyProductInput(model, input); err != nil {
+		return err
+	}
+
+	switch p := model.(type) {
+	case *models.DriedFood:
+		p.Barcode = input.Barcode
+	case *models.FreshFood:
+		p.Barcode = input.Barcode
+	case *models.Snack:
+		p.Barcode = input.Barcode
+	case *models.SoftDrink:
+		p.Barcode = input.Barcode
+	case *models.Stationery:
+		p.Barcode = input.Barcode
+	default:
+		return fmt.Errorf("unsupported product model")
+	}
+
+	return config.DB.Create(model).Error
 }
 
 func GetProductsByCategory(c *gin.Context) {
@@ -100,20 +156,8 @@ func GetProductsByCategory(c *gin.Context) {
 		}
 	}
 
-	var result interface{}
-
-	switch category {
-	case "dried_food":
-		result = &[]models.DriedFood{}
-	case "fresh_food":
-		result = &[]models.FreshFood{}
-	case "snack":
-		result = &[]models.Snack{}
-	case "soft_drink":
-		result = &[]models.SoftDrink{}
-	case "stationery":
-		result = &[]models.Stationery{}
-	default:
+	result, err := getProductSliceByCategory(category)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid category"})
 		return
 	}
@@ -123,11 +167,10 @@ func GetProductsByCategory(c *gin.Context) {
 		return
 	}
 
-	if  config.RDB != nil {
+	if config.RDB != nil {
 		if data, err := json.Marshal(result); err == nil {
 			_ = config.RDB.Set(config.Ctx, productsCacheKey(category), data, productsCacheTTL).Err()
 		}
-		
 	}
 
 	c.JSON(http.StatusOK, result)
@@ -164,7 +207,7 @@ func CreateProductByCategory(c *gin.Context) {
 		}
 	}
 
-	invalidateProductsCache(category)
+	invalidateAllProductsCache()
 	c.JSON(http.StatusCreated, gin.H{"message": "product(s) created"})
 }
 
@@ -190,7 +233,7 @@ func CreateProductsBulkByCategory(c *gin.Context) {
 		}
 	}
 
-	invalidateProductsCache(category)
+	invalidateAllProductsCache()
 	c.JSON(http.StatusCreated, gin.H{"message": "bulk products created"})
 }
 
@@ -204,79 +247,33 @@ func UpdateProductByCategory(c *gin.Context) {
 		return
 	}
 
-	var err error
-	switch category {
-	case "dried_food":
-		var product models.DriedFood
-		err = config.DB.Where("barcode = ?", barcode).First(&product).Error
-		if err == nil {
-			product.ProductName = input.ProductName
-			product.Price = input.Price
-			product.Cost = input.Cost
-			product.Stock = input.Stock
-			product.ReorderLevel = input.ReorderLevel
-			product.ImageURL = input.ImageURL
-			err = config.DB.Save(&product).Error
-		}
-	case "fresh_food":
-		var product models.FreshFood
-		err = config.DB.Where("barcode = ?", barcode).First(&product).Error
-		if err == nil {
-			product.ProductName = input.ProductName
-			product.Price = input.Price
-			product.Cost = input.Cost
-			product.Stock = input.Stock
-			product.ReorderLevel = input.ReorderLevel
-			product.ImageURL = input.ImageURL
-			err = config.DB.Save(&product).Error
-		}
-	case "snack":
-		var product models.Snack
-		err = config.DB.Where("barcode = ?", barcode).First(&product).Error
-		if err == nil {
-			product.ProductName = input.ProductName
-			product.Price = input.Price
-			product.Cost = input.Cost
-			product.Stock = input.Stock
-			product.ReorderLevel = input.ReorderLevel
-			product.ImageURL = input.ImageURL
-			err = config.DB.Save(&product).Error
-		}
-	case "soft_drink":
-		var product models.SoftDrink
-		err = config.DB.Where("barcode = ?", barcode).First(&product).Error
-		if err == nil {
-			product.ProductName = input.ProductName
-			product.Price = input.Price
-			product.Cost = input.Cost
-			product.Stock = input.Stock
-			product.ReorderLevel = input.ReorderLevel
-			product.ImageURL = input.ImageURL
-			err = config.DB.Save(&product).Error
-		}
-	case "stationery":
-		var product models.Stationery
-		err = config.DB.Where("barcode = ?", barcode).First(&product).Error
-		if err == nil {
-			product.ProductName = input.ProductName
-			product.Price = input.Price
-			product.Cost = input.Cost
-			product.Stock = input.Stock
-			product.ReorderLevel = input.ReorderLevel
-			product.ImageURL = input.ImageURL
-			err = config.DB.Save(&product).Error
-		}
-	default:
+	model, err := getProductModelByCategory(category)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid category"})
 		return
 	}
 
+	err = config.DB.Where("barcode = ?", barcode).First(model).Error
 	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "product not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot find product"})
+		return
+	}
+
+	if err := applyProductInput(model, input); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := config.DB.Save(model).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot update product"})
 		return
 	}
 
-	invalidateProductsCache(category)
+	invalidateAllProductsCache()
 	c.JSON(http.StatusOK, gin.H{"message": "product updated"})
 }
 
@@ -284,29 +281,23 @@ func DeleteProductByCategory(c *gin.Context) {
 	category := c.Param("category")
 	barcode := c.Param("barcode")
 
-	var err error
-
-	switch category {
-	case "dried_food":
-		err = config.DB.Where("barcode = ?", barcode).Delete(&models.DriedFood{}).Error
-	case "fresh_food":
-		err = config.DB.Where("barcode = ?", barcode).Delete(&models.FreshFood{}).Error
-	case "snack":
-		err = config.DB.Where("barcode = ?", barcode).Delete(&models.Snack{}).Error
-	case "soft_drink":
-		err = config.DB.Where("barcode = ?", barcode).Delete(&models.SoftDrink{}).Error
-	case "stationery":
-		err = config.DB.Where("barcode = ?", barcode).Delete(&models.Stationery{}).Error
-	default:
+	model, err := getProductModelByCategory(category)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid category"})
 		return
 	}
 
-	if err != nil {
+	tx := config.DB.Where("barcode = ?", barcode).Delete(model)
+	if tx.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot delete product"})
 		return
 	}
 
-	invalidateProductsCache(category)
+	if tx.RowsAffected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "product not found"})
+		return
+	}
+
+	invalidateAllProductsCache()
 	c.JSON(http.StatusOK, gin.H{"message": "product deleted"})
 }
